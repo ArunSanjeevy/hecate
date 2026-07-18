@@ -11,24 +11,19 @@ services:
       - key: NODE_ENV
         value: prod
       - key: DATABASE_URL
-        fromDatabase:
-          name: hecate-db
-          property: connectionString
+        sync: false # User will paste their Aiven PostgreSQL connection string here
       - key: REDIS_URL
-        fromConnectionString:
-          type: redis
-          name: hecate-cache
+        sync: false # User will paste their Upstash Redis connection string here
       - key: API_KEY
         generateValue: true # Generates a secure API key automatically
 
-  # 2. React Admin Dashboard
-  - type: web
+  # 2. React Admin Dashboard (Static Site)
+  - type: static
     name: hecate-admin
-    env: static
     plan: free
     rootDir: admin-dashboard
     buildCommand: npm install && npm run build
-    publishDir: dist
+    staticPublishPath: dist
     routes:
       # Direct all routes to index.html for React Router routing
       - type: rewrite
@@ -40,14 +35,3 @@ services:
           type: web
           name: hecate-backend
           property: host
-
-# Managed Databases
-databases:
-  - name: hecate-db
-    plan: free
-
-# Managed Cache
-redis:
-  - name: hecate-cache
-    plan: free
-    ipAllowList: [] # Strict VPC access only
