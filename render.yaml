@@ -5,7 +5,7 @@ services:
     runtime: node
     plan: free
     rootDir: .
-    buildCommand: npm install
+    buildCommand: npm install && npm --prefix js-sdk install && npm --prefix js-sdk run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
