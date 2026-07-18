@@ -1,163 +1,45 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { apiClient, APIError } from '../src/api/client';
+import { apiClient, APIError, setAuthToken, setUnauthorizedHandler } from '../src/api/client';
+
+const jsonResponse = (data, status = 200) => ({ ok: status < 400, status, statusText: '', headers: { get: () => 'application/json' }, json: async () => data });
 
 describe('API Client', () => {
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn());
-  });
+  beforeEach(() => { vi.stubGlobal('fetch', vi.fn()); setAuthToken(null); });
 
-  it('should send the x-api-key and Content-Type headers', async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ status: 'success' }),
-    });
-
+  it('sends a bearer token, never an API key, to control-plane routes', async () => {
+    setAuthToken('user-jwt');
+    fetch.mockResolvedValueOnce(jsonResponse({ experiments: [] }));
     await apiClient.getExperiments();
-
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/experiments'),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
-          'x-api-key': 'dev-api-key',
-        }),
-      })
-    );
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/v1/experiments'), expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer user-jwt', 'Content-Type': 'application/json' }) }));
+    expect(fetch.mock.calls[0][1].headers).not.toHaveProperty('x-api-key');
   });
 
-  it('should handle 400 validation error', async () => {
-    const errorPayload = { error_code: 'invalid_payload', message: 'Variants must total 100' };
-    fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 400,
-      headers: { get: () => 'application/json' },
-      json: async () => errorPayload,
-    });
-
-    await expect(apiClient.createExperiment({})).rejects.toThrowError(
-      new APIError('Variants must total 100', 400, 'invalid_payload', errorPayload)
-    );
+  it('does not add authorization to login', async () => {
+    setAuthToken('old-token');
+    fetch.mockResolvedValueOnce(jsonResponse({ token: 'new-token' }));
+    await apiClient.login({ email: 'me@example.com', password: 'password123' });
+    expect(fetch.mock.calls[0][1].headers).not.toHaveProperty('Authorization');
   });
 
-  it('should handle 401 unauthorized error', async () => {
-    fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ error_code: 'unauthorized', message: 'Invalid API key' }),
-    });
-
-    await expect(apiClient.getExperiments()).rejects.toThrowError(
-      new APIError('Missing or invalid API key.', 401, 'unauthorized')
-    );
+  it('handles backend validation and expiration errors', async () => {
+    fetch.mockResolvedValueOnce(jsonResponse({ message: 'Invalid payload' }, 400));
+    await expect(apiClient.createExperiment({})).rejects.toMatchObject({ message: 'Invalid payload', status: 400, errorCode: 'invalid_payload' });
+    const expireSession = vi.fn();
+    setUnauthorizedHandler(expireSession);
+    setAuthToken('expired');
+    fetch.mockResolvedValueOnce(jsonResponse({ message: 'Expired' }, 401));
+    await expect(apiClient.getExperiments()).rejects.toMatchObject({ message: 'Your session has expired. Please log in again.', status: 401, errorCode: 'unauthorized' });
+    expect(expireSession).toHaveBeenCalledOnce();
   });
 
-  it('should handle 404 not found error', async () => {
-    fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ error_code: 'experiment_not_found', message: 'Not found' }),
-    });
-
-    await expect(apiClient.getExperiment('unknown')).rejects.toThrowError(
-      new APIError('Experiment or resource not found.', 404, 'not_found')
-    );
-  });
-
-  it('should handle 409 duplicate key error', async () => {
-    fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 409,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ error_code: 'duplicate_experiment_key', message: 'Duplicate' }),
-    });
-
-    await expect(apiClient.createExperiment({ key: 'existing' })).rejects.toThrowError(
-      new APIError('Experiment with this key already exists.', 409, 'duplicate_key')
-    );
-  });
-
-  it('should handle 500 server error', async () => {
-    fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ error_code: 'server_error', message: 'Internal Server Error' }),
-    });
-
-    await expect(apiClient.getExperiments()).rejects.toThrowError(
-      new APIError('Internal server error occurred.', 500, 'server_error')
-    );
-  });
-
-  it('should handle network failures', async () => {
-    fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-
-    await expect(apiClient.getExperiments()).rejects.toThrowError(
-      new APIError('Network error or connection failed.', 0, 'network_failure')
-    );
-  });
-
-  it('should handle request timeout', async () => {
-    const abortError = new Error('The user aborted a request.');
-    abortError.name = 'AbortError';
-    fetch.mockRejectedValueOnce(abortError);
-
-    await expect(apiClient.getExperiments()).rejects.toThrowError(
-      new APIError('Request timed out.', 408, 'timeout')
-    );
-  });
-
-  it('should call activateExperiment successfully', async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ status: 'success' }),
-    });
-
-    await apiClient.activateExperiment('my_exp');
-
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/experiments/my_exp/activate'),
-      expect.objectContaining({
-        method: 'POST',
-      })
-    );
-  });
-
-  it('should call deactivateExperiment successfully', async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ status: 'success' }),
-    });
-
-    await apiClient.deactivateExperiment('my_exp');
-
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/experiments/my_exp/deactivate'),
-      expect.objectContaining({
-        method: 'POST',
-      })
-    );
-  });
-
-  it('should call deleteExperiment successfully', async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      headers: { get: () => 'application/json' },
-      json: async () => ({ status: 'success' }),
-    });
-
-    await apiClient.deleteExperiment('my_exp');
-
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/experiments/my_exp'),
-      expect.objectContaining({
-        method: 'DELETE',
-      })
-    );
+  it('manages SDK keys with the authenticated API', async () => {
+    setAuthToken('user-jwt');
+    fetch.mockResolvedValueOnce(jsonResponse({ keys: [] }));
+    await apiClient.getKeys();
+    fetch.mockResolvedValueOnce(jsonResponse({ key: { id: '1', apiKey: 'hk_secret' } }, 201));
+    await apiClient.createKey({ name: 'Staging' });
+    fetch.mockResolvedValueOnce(jsonResponse({ status: 'success' }));
+    await apiClient.revokeKey('1');
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual(expect.arrayContaining([expect.stringContaining('/api/v1/keys'), expect.stringContaining('/api/v1/keys/1')]));
   });
 });

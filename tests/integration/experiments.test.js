@@ -334,4 +334,47 @@ describe('Experiment CRUD (Phase 1)', () => {
         .expect(404);
     });
   });
+
+  describe('multi-tenant isolation', () => {
+    const createUser = async (email) => {
+      const registration = await request(app)
+        .post('/api/v1/auth/signup')
+        .send({ email, password: 'correct-horse-battery-staple' })
+        .expect(201);
+      const login = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email, password: 'correct-horse-battery-staple' })
+        .expect(200);
+      return {
+        apiKey: registration.body.apiKey,
+        authorization: `Bearer ${login.body.token}`
+      };
+    };
+
+    it('does not allow a second tenant to read or mutate an experiment', async () => {
+      const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const owner = await createUser(`owner-isolation-${suffix}@example.com`);
+      const other = await createUser(`other-isolation-${suffix}@example.com`);
+      await request(app).post('/api/v1/experiments').set('Authorization', owner.authorization).send(validExperiment).expect(201);
+
+      await request(app).get('/api/v1/experiments/checkout_button_text').set('Authorization', other.authorization).expect(404);
+      const list = await request(app).get('/api/v1/experiments').set('Authorization', other.authorization).expect(200);
+      expect(list.body.experiments).toEqual([]);
+      await request(app).put('/api/v1/experiments/checkout_button_text').set('Authorization', other.authorization).send({
+        status: 'paused', variants: validExperiment.variants
+      }).expect(404);
+      await request(app).post('/api/v1/experiments/checkout_button_text/activate').set('Authorization', other.authorization).expect(404);
+      await request(app).post('/api/v1/experiments/checkout_button_text/deactivate').set('Authorization', other.authorization).expect(404);
+      await request(app).delete('/api/v1/experiments/checkout_button_text').set('Authorization', other.authorization).expect(404);
+
+      const assignments = await request(app).post('/api/v1/assignments').set('x-api-key', other.apiKey).send({
+        visitorId: 'visitor-isolation', experimentKeys: ['checkout_button_text']
+      }).expect(200);
+      expect(assignments.body.errors).toEqual([{ experimentKey: 'checkout_button_text', reason: 'experiment_not_found' }]);
+      await request(app).post('/api/v1/events/exposure').set('x-api-key', other.apiKey).send({
+        visitorId: 'visitor-isolation', experimentKey: 'checkout_button_text', variantKey: 'control'
+      }).expect(404);
+      await request(app).get('/api/v1/results/checkout_button_text').set('Authorization', other.authorization).expect(404);
+    });
+  });
 });

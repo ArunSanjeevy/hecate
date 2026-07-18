@@ -144,6 +144,18 @@ button, input, select, textarea {
   margin: 0 auto;
 }
 
+.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
+.auth-card { width: min(100%, 440px); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 2rem; }
+.auth-card .logo-icon { margin-bottom: 1.25rem; }
+.auth-card h1 { font-family: var(--font-display); font-size: 1.75rem; margin-bottom: 1rem; }
+.auth-submit { width: 100%; }
+.auth-switch { margin-top: 1.25rem; color: var(--text-secondary); text-align: center; }
+.auth-switch a { color: var(--accent-primary); font-weight: 600; }
+.secret-key { display: block; overflow-wrap: anywhere; padding: .75rem; margin: 1rem 0; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); }
+.key-form { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 1rem; }
+.key-form .form-group { margin-bottom: 0; }
+.user-email { color: var(--text-secondary); font-size: .875rem; }
+
 /* Sidebar Elements */
 .logo-container {
   display: flex;
@@ -749,6 +761,8 @@ button, input, select, textarea {
   .variant-row button {
     justify-self: flex-start;
   }
+  .key-form { grid-template-columns: 1fr; }
+  .user-email { display: none; }
 }
 
 /* Dropdown item hover transitions */
