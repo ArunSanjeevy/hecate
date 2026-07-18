@@ -80,6 +80,32 @@ describe('Deterministic Assignment (Phase 2)', () => {
       expect(['control', 'treatment']).toContain(homepageHeroAssignment.variantKey);
     });
 
+    it('should return the selected variant static content when content delivery is enabled', async () => {
+      const contentExperiment = {
+        key: 'homepage_tagline',
+        status: 'active',
+        variants: [
+          { key: 'control', allocation: 50, content: { type: 'static_text', text: 'Shop smarter today.' } },
+          { key: 'treatment', allocation: 50, content: { type: 'static_text', text: 'Find your next favorite.' } }
+        ]
+      };
+      await request(app)
+        .post('/api/v1/experiments')
+        .set('x-api-key', 'dev-api-key')
+        .send(contentExperiment)
+        .expect(201);
+
+      const response = await request(app)
+        .post('/api/v1/assignments')
+        .set('x-api-key', 'dev-api-key')
+        .send({ visitorId: 'content-visitor', experimentKeys: ['homepage_tagline'] })
+        .expect(200);
+
+      const assignment = response.body.assignments[0];
+      const assignedVariant = contentExperiment.variants.find(variant => variant.key === assignment.variantKey);
+      expect(assignment.content).toEqual(assignedVariant.content);
+    });
+
     it('should assign variants correctly mapping to boundaries', async () => {
       const splitExperiment = {
         key: 'split_test',

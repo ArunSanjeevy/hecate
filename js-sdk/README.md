@@ -89,6 +89,20 @@ async function runExperiment() {
 runExperiment();
 ```
 
+### Returning static variant content
+
+When an experiment is configured with static text content, read the selected
+variant's content after loading assignments:
+
+```javascript
+await client.getAssignments(['homepage_tagline']);
+const content = client.getContent('homepage_tagline');
+if (content?.type === 'static_text') {
+  document.getElementById('hero-headline').innerText = content.text;
+}
+client.trackExposure('homepage_tagline');
+```
+
 ### 3. React Integration Lifecycle
 To integrate Hecate in React, follow this recommended lifecycle pattern:
 

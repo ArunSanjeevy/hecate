@@ -32,6 +32,13 @@ npm run dev
 - `/experiments` manages experiments and results.
 - `/keys` lists, creates, copies once, and revokes SDK/API keys. These keys are for SDK clients, not dashboard access.
 
+## Static variant content
+
+When creating or editing a draft experiment, select **Return plain-text content
+with each assignment** to add a text value for every variant. Active, paused,
+and archived experiment configurations are immutable; create a new experiment
+version to change content after activation.
+
 ## Commands
 
 ```bash

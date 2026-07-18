@@ -134,6 +134,31 @@ describe('Create Experiment Page', () => {
     });
   });
 
+  it('should submit static text content for every variant when content delivery is enabled', async () => {
+    apiClient.createExperiment.mockResolvedValue({
+      status: 'success',
+      experiment: { key: 'homepage_tagline' }
+    });
+    render(<ExperimentCreate />, { wrapper: createWrapper() });
+
+    fireEvent.change(screen.getByTestId('field-key'), { target: { value: 'homepage_tagline' } });
+    fireEvent.click(screen.getByTestId('content-enabled-checkbox'));
+    fireEvent.change(screen.getByTestId('variant-content-input-0'), { target: { value: 'Shop smarter today.' } });
+    fireEvent.change(screen.getByTestId('variant-content-input-1'), { target: { value: 'Find your next favorite.' } });
+    fireEvent.submit(screen.getByTestId('create-experiment-form'));
+
+    await waitFor(() => {
+      expect(apiClient.createExperiment).toHaveBeenCalledWith({
+        key: 'homepage_tagline',
+        status: 'draft',
+        variants: [
+          { key: 'control', allocation: 50, content: { type: 'static_text', text: 'Shop smarter today.' } },
+          { key: 'treatment', allocation: 50, content: { type: 'static_text', text: 'Find your next favorite.' } }
+        ]
+      });
+    });
+  });
+
   it('should display field error when duplicate experiment key is submitted', async () => {
     const duplicateError = new APIError('Duplicate', 409, 'duplicate_key');
     apiClient.createExperiment.mockRejectedValue(duplicateError);

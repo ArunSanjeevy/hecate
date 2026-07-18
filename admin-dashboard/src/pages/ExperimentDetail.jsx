@@ -6,6 +6,17 @@ import { ArrowLeft, Save, Trash2, Plus, AlertCircle, BarChart2, CheckCircle2, Pl
 import { apiClient } from '../api/client';
 import { LoadingState, ErrorState } from '../components/States';
 
+const toFormValues = (experiment) => ({
+  key: experiment.key,
+  status: experiment.status,
+  hasContent: Boolean(experiment.variants?.some(variant => variant.content)),
+  variants: experiment.variants?.map(variant => ({
+    key: variant.key,
+    allocation: variant.allocation,
+    content: variant.content
+  })) || []
+});
+
 export default function ExperimentDetail() {
   const { key } = useParams();
   const queryClient = useQueryClient();
@@ -30,6 +41,7 @@ export default function ExperimentDetail() {
     defaultValues: {
       key: '',
       status: 'draft',
+      hasContent: false,
       variants: []
     }
   });
@@ -44,11 +56,7 @@ export default function ExperimentDetail() {
     onSuccess: (data) => {
       queryClient.setQueryData(['experiment', key], data.experiment);
       setOriginalExperiment(data.experiment);
-      reset({
-        key: data.experiment.key,
-        status: data.experiment.status,
-        variants: data.experiment.variants?.map(v => ({ key: v.key, allocation: v.allocation })) || []
-      });
+      reset(toFormValues(data.experiment));
       setActionError(null);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 5000);
@@ -64,11 +72,7 @@ export default function ExperimentDetail() {
     onSuccess: (data) => {
       queryClient.setQueryData(['experiment', key], data.experiment);
       setOriginalExperiment(data.experiment);
-      reset({
-        key: data.experiment.key,
-        status: data.experiment.status,
-        variants: data.experiment.variants?.map(v => ({ key: v.key, allocation: v.allocation })) || []
-      });
+      reset(toFormValues(data.experiment));
       setActionError(null);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 5000);
@@ -107,16 +111,13 @@ export default function ExperimentDetail() {
   // Load experiment details into form
   useEffect(() => {
     if (experiment) {
-      reset({
-        key: experiment.key,
-        status: experiment.status,
-        variants: experiment.variants?.map(v => ({ key: v.key, allocation: v.allocation })) || []
-      });
+      reset(toFormValues(experiment));
       setOriginalExperiment(experiment);
     }
   }, [experiment, reset]);
 
   const watchedVariants = watch('variants') || [];
+  const hasContent = watch('hasContent');
 
   // Calculate total allocations
   const totalAllocation = watchedVariants.reduce((acc, curr) => {
@@ -134,10 +135,11 @@ export default function ExperimentDetail() {
   });
 
   const hasEmptyKeys = watchedVariants.some(v => !v.key || v.key.trim() === '');
+  const hasEmptyContent = hasContent && watchedVariants.some(v => !v.content?.text || v.content.text.trim() === '');
 
   const isAllocationValid = totalAllocation === 100;
   const isVariantsCountValid = watchedVariants.length >= 2;
-  const isFormValidLocally = isAllocationValid && isVariantsCountValid && !hasDuplicateKeys && !hasInvalidAllocations && !hasEmptyKeys;
+  const isFormValidLocally = isAllocationValid && isVariantsCountValid && !hasDuplicateKeys && !hasInvalidAllocations && !hasEmptyKeys && !hasEmptyContent;
 
   // Determine if allocations have changed compared to original loaded experiment
   const checkAllocationsChanged = () => {
@@ -182,10 +184,13 @@ export default function ExperimentDetail() {
 
     const payload = {
       status: data.status,
-      variants: data.variants.map(v => ({
-        key: v.key.trim(),
-        allocation: Number(v.allocation)
-      }))
+      variants: data.variants.map(v => {
+        const variant = { key: v.key.trim(), allocation: Number(v.allocation) };
+        if (data.hasContent) {
+          variant.content = { type: 'static_text', text: v.content.text.trim() };
+        }
+        return variant;
+      })
     };
 
     mutation.mutate(payload);
@@ -436,6 +441,17 @@ export default function ExperimentDetail() {
 
         {/* Variants Section */}
         <div style={{ marginTop: '2rem' }}>
+          <div className="form-group">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input
+                type="checkbox"
+                disabled={!isEditing}
+                {...register('hasContent')}
+                data-testid="content-enabled-checkbox"
+              />
+              Return plain-text content with each assignment
+            </label>
+          </div>
           <div className="variants-container-header">
             <h3 style={{ fontSize: '1.125rem', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
               Variants Configuration
@@ -444,7 +460,7 @@ export default function ExperimentDetail() {
               type="button"
               className="btn btn-secondary btn-sm"
               style={{ padding: '0.375rem 0.75rem', display: isEditing ? 'inline-flex' : 'none' }}
-              onClick={() => append({ key: '', allocation: 0 })}
+              onClick={() => append({ key: '', allocation: 0, content: hasContent ? { type: 'static_text', text: '' } : undefined })}
               data-testid="add-variant-btn"
             >
               <Plus size={16} />
@@ -470,6 +486,12 @@ export default function ExperimentDetail() {
             </p>
           )}
 
+          {hasEmptyContent && (
+            <p className="form-error" style={{ marginBottom: '1rem' }} data-testid="error-empty-content">
+              Content is required for every variant.
+            </p>
+          )}
+
           {/* Variants Rows */}
           {fields.map((field, index) => (
             <div key={field.id} className="variant-row" data-testid={`variant-row-${index}`}>
@@ -484,6 +506,20 @@ export default function ExperimentDetail() {
                   data-testid={`variant-key-input-${index}`}
                 />
               </div>
+
+              {hasContent && (
+                <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+                  <label className="form-label" style={{ fontSize: '0.8125rem' }}>Plain Text Content</label>
+                  <textarea
+                    placeholder="Text returned when this variant is assigned"
+                    className="form-input"
+                    rows={3}
+                    disabled={!isEditing}
+                    {...register(`variants.${index}.content.text`)}
+                    data-testid={`variant-content-input-${index}`}
+                  />
+                </div>
+              )}
 
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontSize: '0.8125rem' }}>Traffic Allocation (%)</label>
@@ -539,11 +575,7 @@ export default function ExperimentDetail() {
               className="btn btn-secondary"
               onClick={() => {
                 if (originalExperiment) {
-                  reset({
-                    key: originalExperiment.key,
-                    status: originalExperiment.status,
-                    variants: originalExperiment.variants?.map(v => ({ key: v.key, allocation: v.allocation })) || []
-                  });
+                  reset(toFormValues(originalExperiment));
                 }
                 setIsEditing(false);
                 clearErrors();
