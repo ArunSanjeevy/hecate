@@ -43,7 +43,4 @@ services:
     envVars:
       - fromGroup: hecate-shared-secrets
       - key: VITE_HECATE_API_URL
-        fromService:
-          type: web
-          name: hecate-backend
-          property: host
+        sync: false # Paste the public URL of your backend service here (e.g. https://hecate-backend.onrender.com)
