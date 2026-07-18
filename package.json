@@ -1,0 +1,39 @@
+{
+  "name": "hecate",
+  "version": "1.0.0",
+  "description": "Hecate Experimentation Backend MVP",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "db:init": "node scripts/init-dbs.js",
+    "cache:clear-experiment": "node scripts/clear-experiment-cache.js",
+    "test": "jest --runInBand",
+    "test:unit": "jest tests/unit --runInBand",
+    "test:integration": "jest tests/integration --runInBand",
+    "lint": "echo 'No lint configuration yet'"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "cls-rtracer": "^2.6.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "joi": "^17.13.1",
+    "morgan": "^1.10.0",
+    "pg-promise": "^11.8.0",
+    "redis": "^4.6.14",
+    "uuid": "^9.0.1",
+    "winston": "^3.13.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "roots": [
+      "<rootDir>/tests"
+    ]
+  }
+}
