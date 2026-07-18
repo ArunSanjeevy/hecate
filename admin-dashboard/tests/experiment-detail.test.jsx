@@ -80,7 +80,7 @@ describe('Experiment Detail / Edit Page', () => {
   });
 
   it('should display warning alert ONLY when allocations differ from original', async () => {
-    apiClient.getExperiment.mockResolvedValue(mockExperiment);
+    apiClient.getExperiment.mockResolvedValue({ ...mockExperiment, status: 'draft' });
     renderWithRouter(<ExperimentDetail />);
 
     await screen.findByTestId('detail-title');
@@ -113,13 +113,13 @@ describe('Experiment Detail / Edit Page', () => {
     expect(screen.queryByTestId('allocation-warning-alert')).not.toBeInTheDocument();
   });
 
-  it('should save edited status and variants and show success banner', async () => {
-    apiClient.getExperiment.mockResolvedValue(mockExperiment);
+  it('should save edited draft variants and show success banner', async () => {
+    apiClient.getExperiment.mockResolvedValue({ ...mockExperiment, status: 'draft' });
     apiClient.updateExperiment.mockResolvedValue({
       status: 'success',
       experiment: {
         key: 'checkout_btn_text',
-        status: 'paused',
+        status: 'draft',
         variants: [
           { key: 'control', allocation: 90 },
           { key: 'treatment', allocation: 10 }
@@ -134,10 +134,6 @@ describe('Experiment Detail / Edit Page', () => {
     // Click edit button first
     fireEvent.click(screen.getByTestId('edit-btn'));
 
-    // Edit status
-    const statusSelect = screen.getByTestId('field-status');
-    fireEvent.change(statusSelect, { target: { value: 'paused' } });
-
     // Edit allocations (90 / 10)
     fireEvent.change(screen.getByTestId('variant-allocation-input-0'), { target: { value: '90' } });
     fireEvent.change(screen.getByTestId('variant-allocation-input-1'), { target: { value: '10' } });
@@ -147,7 +143,7 @@ describe('Experiment Detail / Edit Page', () => {
 
     await waitFor(() => {
       expect(apiClient.updateExperiment).toHaveBeenCalledWith('checkout_btn_text', {
-        status: 'paused',
+        status: 'draft',
         variants: [
           { key: 'control', allocation: 90 },
           { key: 'treatment', allocation: 10 }
@@ -276,8 +272,8 @@ describe('Experiment Detail / Edit Page', () => {
     expect(screen.queryByTestId('cancel-edit-btn')).not.toBeInTheDocument();
   });
 
-  it('should toggle to edit mode, enable inputs, and revert on Cancel', async () => {
-    apiClient.getExperiment.mockResolvedValue(mockExperiment);
+  it('should toggle a draft to edit mode, enable inputs, and revert on Cancel', async () => {
+    apiClient.getExperiment.mockResolvedValue({ ...mockExperiment, status: 'draft' });
     renderWithRouter(<ExperimentDetail />);
 
     await screen.findByTestId('detail-title');
@@ -285,8 +281,8 @@ describe('Experiment Detail / Edit Page', () => {
     // Click edit
     fireEvent.click(screen.getByTestId('edit-btn'));
 
-    // Status select and variant inputs should now be enabled
-    expect(screen.getByTestId('field-status')).not.toBeDisabled();
+    // Status actions remain separate; only configuration inputs are enabled.
+    expect(screen.getByTestId('field-status')).toBeDisabled();
     expect(screen.getByTestId('variant-key-input-0')).not.toBeDisabled();
     expect(screen.getByTestId('variant-allocation-input-0')).not.toBeDisabled();
 
@@ -307,5 +303,19 @@ describe('Experiment Detail / Edit Page', () => {
     // Fields should be disabled again and reverted
     expect(screen.getByTestId('variant-allocation-input-0')).toBeDisabled();
     expect(screen.getByTestId('variant-allocation-input-0')).toHaveValue(50);
+  });
+
+  it.each(['active', 'paused', 'archived'])('locks %s configuration and explains how to change it', async (status) => {
+    apiClient.getExperiment.mockResolvedValue({ ...mockExperiment, status });
+    renderWithRouter(<ExperimentDetail />);
+
+    await screen.findByTestId('detail-title');
+
+    expect(screen.queryByTestId('edit-btn')).not.toBeInTheDocument();
+    expect(screen.getByTestId('variant-key-input-0')).toBeDisabled();
+    expect(screen.getByTestId('variant-allocation-input-0')).toBeDisabled();
+    expect(screen.getByTestId('immutable-config-guidance')).toHaveTextContent('Create a new experiment key/version');
+    expect(screen.getByTestId('link-to-results')).toBeInTheDocument();
+    expect(screen.getByTestId('actions-dropdown-toggle')).toBeInTheDocument();
   });
 });

@@ -122,12 +122,8 @@ describe('Deterministic Assignment (Phase 2)', () => {
       await createExperiments();
 
       await request(app)
-        .put('/api/v1/experiments/checkout_button_text')
+        .post('/api/v1/experiments/checkout_button_text/deactivate')
         .set('x-api-key', 'dev-api-key')
-        .send({
-          status: 'paused',
-          variants: experiment2.variants
-        })
         .expect(200);
 
       const res = await request(app)

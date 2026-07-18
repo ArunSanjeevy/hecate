@@ -55,7 +55,7 @@ describe('Authentication and API key management', () => {
     const created = await request(app)
       .post('/api/v1/keys')
       .set('Authorization', authorization)
-      .send({ name: 'Staging SDK' })
+      .send({ name: 'Staging SDK', expiresAt: new Date(Date.now() + 86400000).toISOString() })
       .expect(201);
 
     expect(created.body.key.apiKey).toMatch(/^hk_[a-f0-9]{48}$/);
@@ -73,6 +73,23 @@ describe('Authentication and API key management', () => {
     await request(app).get('/api/v1/keys').expect(401);
   });
 
+  it('requires API key expiration and limits it to one year', async () => {
+    await signup('expiring-key-owner@example.com').expect(201);
+    const login = await request(app).post('/api/v1/auth/login').send({
+      email: 'expiring-key-owner@example.com',
+      password: 'correct-horse-battery-staple'
+    }).expect(200);
+    const authorization = `Bearer ${login.body.token}`;
+
+    const missingExpiry = await request(app).post('/api/v1/keys').set('Authorization', authorization).send({ name: 'Missing expiry' }).expect(400);
+    expect(missingExpiry.body.message).toContain('expiration is required');
+
+    const tooLong = new Date();
+    tooLong.setFullYear(tooLong.getFullYear() + 2);
+    const excessiveExpiry = await request(app).post('/api/v1/keys').set('Authorization', authorization).send({ name: 'Too long', expiresAt: tooLong.toISOString() }).expect(400);
+    expect(excessiveExpiry.body.message).toContain('cannot exceed one year');
+  });
+
   it('limits SDK keys to SDK routes while allowing the user JWT on the control plane', async () => {
     await signup('scoped-owner@example.com').expect(201);
     const login = await request(app).post('/api/v1/auth/login').send({
@@ -82,7 +99,7 @@ describe('Authentication and API key management', () => {
     const createdKey = await request(app)
       .post('/api/v1/keys')
       .set('Authorization', `Bearer ${login.body.token}`)
-      .send({ name: 'Browser SDK' })
+      .send({ name: 'Browser SDK', expiresAt: new Date(Date.now() + 86400000).toISOString() })
       .expect(201);
     const sdkKey = createdKey.body.key.apiKey;
     const experiment = {

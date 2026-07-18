@@ -4,6 +4,7 @@ const request = require('supertest');
 const app = require('../../app');
 const { db } = require('../../lib/data-accessors/db');
 const { disconnectRedis, flushAll } = require('../../lib/cache/redis');
+const redisCache = require('../../lib/cache/redis');
 
 describe('Experiment CRUD (Phase 1)', () => {
   beforeAll(async () => {
@@ -164,16 +165,16 @@ describe('Experiment CRUD (Phase 1)', () => {
   });
 
   describe('PUT /api/v1/experiments/:key', () => {
-    it('should update status and allocation successfully', async () => {
+    it('should update a draft experiment configuration successfully', async () => {
       // Create first
       await request(app)
         .post('/api/v1/experiments')
         .set('x-api-key', 'dev-api-key')
-        .send(validExperiment)
+        .send({ ...validExperiment, status: 'draft' })
         .expect(201);
 
       const updatedPayload = {
-        status: 'paused',
+        status: 'draft',
         variants: [
           { key: 'control', allocation: 90 },
           { key: 'treatment', allocation: 10 }
@@ -187,8 +188,48 @@ describe('Experiment CRUD (Phase 1)', () => {
         .expect(200);
 
       expect(res.body.status).toBe('success');
-      expect(res.body.experiment.status).toBe('paused');
+      expect(res.body.experiment.status).toBe('draft');
       expect(res.body.experiment.variants).toEqual(updatedPayload.variants);
+    });
+
+    it.each(['active', 'paused', 'archived'])('rejects %s configuration updates without changing PostgreSQL or Redis', async (status) => {
+      const initial = { ...validExperiment, status };
+      await request(app)
+        .post('/api/v1/experiments')
+        .set('x-api-key', 'dev-api-key')
+        .send(initial)
+        .expect(201);
+
+      const cacheKey = `experiment:${initial.key}`;
+      const deleteCacheSpy = jest.spyOn(redisCache, 'del');
+      const cachedBefore = await redisCache.get(cacheKey);
+      const dbBefore = await db.one('SELECT status, variants FROM experiments WHERE key = $1', [initial.key]);
+      const updatedPayload = {
+        status: 'draft',
+        variants: [
+          { key: 'control', allocation: 90 },
+          { key: 'new_treatment', allocation: 10 }
+        ]
+      };
+
+      const res = await request(app)
+        .put(`/api/v1/experiments/${initial.key}`)
+        .set('x-api-key', 'dev-api-key')
+        .send(updatedPayload)
+        .expect(409);
+
+      expect(res.body).toMatchObject({
+        status: 'failed',
+        error_code: 'experiment_configuration_immutable'
+      });
+      expect(res.body.message).toContain('new experiment key/version');
+
+      const dbAfter = await db.one('SELECT status, variants FROM experiments WHERE key = $1', [initial.key]);
+      const cachedAfter = await redisCache.get(cacheKey);
+      expect(dbAfter).toEqual(dbBefore);
+      expect(cachedAfter).toEqual(cachedBefore);
+      expect(deleteCacheSpy).not.toHaveBeenCalled();
+      deleteCacheSpy.mockRestore();
     });
 
     it('should return 404 when updating unknown experiment', async () => {
@@ -348,7 +389,7 @@ describe('Experiment CRUD (Phase 1)', () => {
       const key = await request(app)
         .post('/api/v1/keys')
         .set('Authorization', authorization)
-        .send({ name: 'Isolation SDK' })
+        .send({ name: 'Isolation SDK', expiresAt: new Date(Date.now() + 86400000).toISOString() })
         .expect(201);
       return { apiKey: key.body.key.apiKey, authorization };
     };

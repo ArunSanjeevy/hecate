@@ -153,6 +153,12 @@ class HecateClient {
       if (!response.ok) {
         const err = new Error(`Request failed with status ${response.status}`);
         err.status = response.status;
+        try {
+          const body = await response.json();
+          err.errorCode = body?.error_code;
+        } catch (parseError) {
+          // Error details are optional; HTTP status still determines retryability.
+        }
         throw err;
       }
 
@@ -273,12 +279,15 @@ class HecateClient {
     const payload = {
       visitorId: this.visitorId,
       experimentKey,
-      variantKey,
       eventType,
       eventName,
       occurredAt: new Date().toISOString(),
       metadata
     };
+
+    if (eventType !== 'conversion') {
+      payload.variantKey = variantKey;
+    }
 
     const shouldRetry = eventType === 'conversion';
 

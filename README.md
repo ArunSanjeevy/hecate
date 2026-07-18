@@ -145,7 +145,7 @@ curl -X POST http://localhost:4000/api/v1/experiments \
   -H "Authorization: Bearer <token>" \
   -d '{
     "key": "checkout_button_text",
-    "status": "active",
+    "status": "draft",
     "variants": [
       { "key": "control", "allocation": 50 },
       { "key": "treatment", "allocation": 50 }
@@ -174,13 +174,17 @@ curl -X PUT http://localhost:4000/api/v1/experiments/checkout_button_text \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
   -d '{
-    "status": "active",
+    "status": "draft",
     "variants": [
       { "key": "control", "allocation": 90 },
       { "key": "treatment", "allocation": 10 }
     ]
   }'
 ```
+
+Only draft experiments can change variants or allocations. Active, paused, and
+archived configurations return `409 experiment_configuration_immutable`; create
+a new experiment key/version instead.
 
 ### 6. Activate Experiment
 `POST /api/v1/experiments/:key/activate`
@@ -231,6 +235,10 @@ curl -X POST http://localhost:4000/api/v1/events/exposure \
   }'
 ```
 
+Exposure tracking is fire-and-forget after rendering. The backend verifies that
+the supplied variant matches deterministic assignment; a mismatched exposure is
+rejected with `409 assignment_mismatch` and is never counted.
+
 ### 11. Record Telemetry (Conversion) Event
 `POST /api/v1/events/telemetry`
 ```bash
@@ -240,7 +248,6 @@ curl -X POST http://localhost:4000/api/v1/events/telemetry \
   -d '{
     "visitorId": "visitor_123",
     "experimentKey": "checkout_button_text",
-    "variantKey": "control",
     "eventType": "conversion",
     "eventName": "order_placed",
     "metadata": {
@@ -248,6 +255,11 @@ curl -X POST http://localhost:4000/api/v1/events/telemetry \
     }
   }'
 ```
+
+Conversions are attributed to the visitor's verified exposure. If that exposure
+has not been recorded yet, the API returns `409 exposure_not_found`; report it
+through the SDK error callback without affecting page behavior. The SDK does
+not automatically retry this attribution error.
 
 ### 12. Get Aggregated Experiment Results
 `GET /api/v1/results/:experimentKey`

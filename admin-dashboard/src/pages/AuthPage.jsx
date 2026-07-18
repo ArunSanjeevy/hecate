@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
+import { Activity, AlertCircle } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 export default function AuthPage({ mode }) {
@@ -10,8 +10,26 @@ export default function AuthPage({ mode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [serverError, setServerError] = useState('');
+  const [backendStatus, setBackendStatus] = useState('checking');
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({ mode: 'onBlur' });
   const destination = location.state?.from?.pathname || '/';
+
+  useEffect(() => {
+    let mounted = true;
+    const checkHealth = async () => {
+      const url = import.meta.env.VITE_HECATE_API_URL || 'http://localhost:4000';
+      try {
+        const response = await fetch(`${url.replace(/\/$/, '')}/health`, { method: 'GET', headers: { Accept: 'application/json' } });
+        const payload = response.ok ? await response.json() : null;
+        if (mounted) setBackendStatus(payload?.status === 'ok' ? 'online' : 'offline');
+      } catch {
+        if (mounted) setBackendStatus('offline');
+      }
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 10000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, []);
 
   if (isAuthenticated) return <Navigate to="/" replace />;
 
@@ -31,7 +49,11 @@ export default function AuthPage({ mode }) {
   };
 
   return (
-    <main className="auth-page"><section className="auth-card">
+    <main className="auth-page">
+      <div className="api-status auth-api-status" data-testid="auth-api-status" aria-label={`Backend API ${backendStatus}`}>
+        <Activity size={16} /><span>API:</span><div className={`status-dot ${backendStatus === 'online' ? 'online' : 'offline'}`} /><span style={{ textTransform: 'capitalize', fontWeight: 600 }}>{backendStatus}</span>
+      </div>
+      <section className="auth-card">
       <div className="logo-icon">H</div><h1>{isSignup ? 'Create your account' : 'Welcome back'}</h1>
       <p className="page-subtitle">{isSignup ? 'Create an account to manage your experiments.' : 'Log in to your Hecate dashboard.'}</p>
       {location.state?.notice && <div className="alert alert-success" role="status"><div className="alert-message">{location.state.notice}</div></div>}

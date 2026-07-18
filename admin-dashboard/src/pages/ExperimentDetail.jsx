@@ -102,6 +102,8 @@ export default function ExperimentDetail() {
     retry: false
   });
 
+  const isDraft = experiment?.status === 'draft';
+
   // Load experiment details into form
   useEffect(() => {
     if (experiment) {
@@ -211,16 +213,18 @@ export default function ExperimentDetail() {
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {!isEditing && (
             <>
-              <button
-                type="button"
-                onClick={() => setIsEditing(true)}
-                className="btn btn-primary btn-sm"
-                style={{ display: 'inline-flex', gap: '0.25rem', background: 'var(--accent-gradient)' }}
-                data-testid="edit-btn"
-              >
-                <Edit2 size={16} />
-                <span>Edit Configuration</span>
-              </button>
+              {isDraft && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="btn btn-primary btn-sm"
+                  style={{ display: 'inline-flex', gap: '0.25rem', background: 'var(--accent-gradient)' }}
+                  data-testid="edit-btn"
+                >
+                  <Edit2 size={16} />
+                  <span>Edit Configuration</span>
+                </button>
+              )}
 
               <Link 
                 to={`/experiments/${encodeURIComponent(key)}/results`} 
@@ -360,7 +364,14 @@ export default function ExperimentDetail() {
       </div>
 
       <h2 className="page-title" data-testid="detail-title">Experiment: {key}</h2>
-      <p className="page-subtitle">Inspect configuration details and update status/allocations</p>
+      <p className="page-subtitle">Inspect configuration details and manage experiment status.</p>
+
+      {!isDraft && (
+        <div className="alert alert-warning" data-testid="immutable-config-guidance" style={{ marginBottom: '1.5rem' }}>
+          <AlertCircle size={20} />
+          <div className="alert-message">Variants and allocation are locked for this experiment. Create a new experiment key/version to change the configuration.</div>
+        </div>
+      )}
 
       {actionError && (
         <div className="alert alert-danger" data-testid="action-error-alert" style={{ marginBottom: '1.5rem' }}>
@@ -412,7 +423,7 @@ export default function ExperimentDetail() {
           <select
             id="experiment-status"
             className="form-select"
-            disabled={!isEditing}
+            disabled
             {...register('status', { required: 'Status is required' })}
             data-testid="field-status"
           >

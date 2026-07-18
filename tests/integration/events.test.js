@@ -4,8 +4,26 @@ const request = require('supertest');
 const app = require('../../app');
 const { db } = require('../../lib/data-accessors/db');
 const { disconnectRedis, flushAll } = require('../../lib/cache/redis');
+const { assignVariant } = require('../../lib/helpers/assignment-engine');
 
-describe('Event Tracking (Phases 3 & 4)', () => {
+describe('Event Tracking (Phase 12)', () => {
+  const experiment = {
+    key: 'checkout_button_text',
+    status: 'active',
+    variants: [
+      { key: 'control', allocation: 50 },
+      { key: 'treatment', allocation: 50 }
+    ]
+  };
+  const assignedVariant = visitorId => assignVariant(visitorId, experiment);
+  const exposureFor = visitorId => ({
+    visitorId,
+    experimentKey: experiment.key,
+    variantKey: assignedVariant(visitorId),
+    occurredAt: '2026-07-18T10:30:00.000Z',
+    metadata: { page: 'checkout' }
+  });
+
   beforeAll(async () => {
     const migrate = require('../../lib/helpers/migrate');
     await migrate();
@@ -16,20 +34,7 @@ describe('Event Tracking (Phases 3 & 4)', () => {
     await db.none('TRUNCATE TABLE exposure_events CASCADE');
     await db.none('TRUNCATE TABLE telemetry_events CASCADE');
     await flushAll();
-
-    // Create a base experiment for tests
-    await request(app)
-      .post('/api/v1/experiments')
-      .set('x-api-key', 'dev-api-key')
-      .send({
-        key: 'checkout_button_text',
-        status: 'active',
-        variants: [
-          { key: 'control', allocation: 50 },
-          { key: 'treatment', allocation: 50 }
-        ]
-      })
-      .expect(201);
+    await request(app).post('/api/v1/experiments').set('x-api-key', 'dev-api-key').send(experiment).expect(201);
   });
 
   afterAll(async () => {
@@ -38,173 +43,75 @@ describe('Event Tracking (Phases 3 & 4)', () => {
   });
 
   describe('POST /api/v1/events/exposure', () => {
-    const validExposure = {
-      visitorId: 'visitor_123',
-      experimentKey: 'checkout_button_text',
-      variantKey: 'control',
-      occurredAt: '2026-07-18T10:30:00.000Z',
-      metadata: { page: 'checkout' }
-    };
+    it('stores a valid deterministic exposure and deduplicates it by experiment and visitor', async () => {
+      const exposure = exposureFor('visitor_123');
+      await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send(exposure).expect(200);
+      const duplicate = await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send(exposure).expect(200);
 
-    it('should record first exposure event with deduped: false', async () => {
-      const res = await request(app)
-        .post('/api/v1/events/exposure')
-        .set('x-api-key', 'dev-api-key')
-        .send(validExposure)
-        .expect(200);
-
-      expect(res.body.status).toBe('success');
-      expect(res.body.deduped).toBe(false);
-
-      const row = await db.one('SELECT * FROM exposure_events WHERE visitor_id = $1', ['visitor_123']);
-      expect(row.experiment_key).toBe('checkout_button_text');
-      expect(row.variant_key).toBe('control');
-      expect(row.metadata).toEqual({ page: 'checkout' });
-      expect(new Date(row.occurred_at).toISOString()).toBe(validExposure.occurredAt);
+      expect(duplicate.body).toMatchObject({ status: 'success', deduped: true });
+      const rows = await db.any('SELECT visitor_id, variant_key FROM exposure_events WHERE visitor_id = $1', [exposure.visitorId]);
+      expect(rows).toEqual([{ visitor_id: exposure.visitorId, variant_key: exposure.variantKey }]);
     });
 
-    it('should deduplicate subsequent identical exposure events with deduped: true', async () => {
-      await request(app)
-        .post('/api/v1/events/exposure')
-        .set('x-api-key', 'dev-api-key')
-        .send(validExposure)
-        .expect(200);
+    it('rejects a mismatched assigned variant without storing an exposure', async () => {
+      const exposure = exposureFor('visitor_mismatch');
+      const mismatchedVariant = exposure.variantKey === 'control' ? 'treatment' : 'control';
+      const response = await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send({ ...exposure, variantKey: mismatchedVariant }).expect(409);
 
-      const res = await request(app)
-        .post('/api/v1/events/exposure')
-        .set('x-api-key', 'dev-api-key')
-        .send(validExposure)
-        .expect(200);
-
-      expect(res.body.status).toBe('success');
-      expect(res.body.deduped).toBe(true);
-
-      const count = await db.one('SELECT count(*)::int FROM exposure_events');
-      expect(count.count).toBe(1);
+      expect(response.body).toMatchObject({ status: 'failed', error_code: 'assignment_mismatch' });
+      const count = await db.one('SELECT count(*)::int FROM exposure_events WHERE visitor_id = $1', [exposure.visitorId]);
+      expect(count.count).toBe(0);
     });
 
-    it('should reject invalid experiment keys with 404', async () => {
-      const payload = { ...validExposure, experimentKey: 'unknown_key' };
-
-      const res = await request(app)
-        .post('/api/v1/events/exposure')
-        .set('x-api-key', 'dev-api-key')
-        .send(payload)
-        .expect(404);
-
-      expect(res.body.status).toBe('failed');
-      expect(res.body.error_code).toBe('experiment_not_found');
-    });
-
-    it('should reject invalid variant keys with 400', async () => {
-      const payload = { ...validExposure, variantKey: 'invalid_variant' };
-
-      const res = await request(app)
-        .post('/api/v1/events/exposure')
-        .set('x-api-key', 'dev-api-key')
-        .send(payload)
-        .expect(400);
-
-      expect(res.body.status).toBe('failed');
-      expect(res.body.error_code).toBe('invalid_payload');
+    it('rejects an unknown experiment and a variant not present in the experiment', async () => {
+      const exposure = exposureFor('visitor_invalid');
+      await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send({ ...exposure, experimentKey: 'unknown_key' }).expect(404);
+      const response = await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send({ ...exposure, variantKey: 'invalid_variant' }).expect(400);
+      expect(response.body.error_code).toBe('invalid_payload');
     });
   });
 
   describe('POST /api/v1/events/telemetry', () => {
-    const validConversion = {
-      visitorId: 'visitor_123',
-      experimentKey: 'checkout_button_text',
-      variantKey: 'control',
-      eventType: 'conversion',
-      eventName: 'order_placed',
-      occurredAt: '2026-07-18T10:35:00.000Z',
-      metadata: { orderValue: 129.99 }
-    };
+    it('derives a conversion variant from a verified exposure and ignores a conflicting supplied variant', async () => {
+      const exposure = exposureFor('visitor_conversion');
+      await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send(exposure).expect(200);
+      const conflictingVariant = exposure.variantKey === 'control' ? 'treatment' : 'control';
+      const response = await request(app).post('/api/v1/events/telemetry').set('x-api-key', 'dev-api-key').send({
+        visitorId: exposure.visitorId, experimentKey: experiment.key, variantKey: conflictingVariant,
+        eventType: 'conversion', eventName: 'order_placed', metadata: { orderValue: 129.99 }
+      }).expect(200);
 
-    const validGeneralEvent = {
-      visitorId: 'visitor_123',
-      experimentKey: 'checkout_button_text',
-      variantKey: 'control',
-      eventType: 'commerce',
-      eventName: 'add_to_cart',
-      metadata: { productId: 'sku_123' }
-    };
-
-    it('should record conversion events with deduped: false', async () => {
-      const res = await request(app)
-        .post('/api/v1/events/telemetry')
-        .set('x-api-key', 'dev-api-key')
-        .send(validConversion)
-        .expect(200);
-
-      expect(res.body.status).toBe('success');
-      expect(res.body.deduped).toBe(false);
-
-      const row = await db.one('SELECT * FROM telemetry_events WHERE visitor_id = $1 AND event_type = $2', ['visitor_123', 'conversion']);
-      expect(row.event_name).toBe('order_placed');
-      expect(row.metadata).toEqual({ orderValue: 129.99 });
+      expect(response.body.deduped).toBe(false);
+      const row = await db.one("SELECT variant_key FROM telemetry_events WHERE event_type = 'conversion'");
+      expect(row.variant_key).toBe(exposure.variantKey);
     });
 
-    it('should deduplicate conversion events with identical names with deduped: true', async () => {
-      await request(app)
-        .post('/api/v1/events/telemetry')
-        .set('x-api-key', 'dev-api-key')
-        .send(validConversion)
-        .expect(200);
+    it('rejects a conversion without a verified exposure and does not store it', async () => {
+      const response = await request(app).post('/api/v1/events/telemetry').set('x-api-key', 'dev-api-key').send({
+        visitorId: 'visitor_without_exposure', experimentKey: experiment.key,
+        eventType: 'conversion', eventName: 'order_placed'
+      }).expect(409);
 
-      const res = await request(app)
-        .post('/api/v1/events/telemetry')
-        .set('x-api-key', 'dev-api-key')
-        .send(validConversion)
-        .expect(200);
-
-      expect(res.body.status).toBe('success');
-      expect(res.body.deduped).toBe(true);
-
-      const count = await db.one('SELECT count(*)::int FROM telemetry_events WHERE event_type = $1', ['conversion']);
-      expect(count.count).toBe(1);
+      expect(response.body.error_code).toBe('exposure_not_found');
+      const count = await db.one("SELECT count(*)::int FROM telemetry_events WHERE event_type = 'conversion'");
+      expect(count.count).toBe(0);
     });
 
-    it('should store different conversion event names independently with deduped: false', async () => {
-      await request(app)
-        .post('/api/v1/events/telemetry')
-        .set('x-api-key', 'dev-api-key')
-        .send(validConversion)
-        .expect(200);
-
-      const secondConversion = { ...validConversion, eventName: 'signup_completed' };
-      const res = await request(app)
-        .post('/api/v1/events/telemetry')
-        .set('x-api-key', 'dev-api-key')
-        .send(secondConversion)
-        .expect(200);
-
-      expect(res.body.status).toBe('success');
-      expect(res.body.deduped).toBe(false);
-
-      const count = await db.one('SELECT count(*)::int FROM telemetry_events WHERE event_type = $1', ['conversion']);
-      expect(count.count).toBe(2);
+    it('deduplicates conversions by experiment, visitor, and event name', async () => {
+      const exposure = exposureFor('visitor_dedupe');
+      await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send(exposure).expect(200);
+      const conversion = { visitorId: exposure.visitorId, experimentKey: experiment.key, eventType: 'conversion', eventName: 'order_placed' };
+      await request(app).post('/api/v1/events/telemetry').set('x-api-key', 'dev-api-key').send(conversion).expect(200);
+      const duplicate = await request(app).post('/api/v1/events/telemetry').set('x-api-key', 'dev-api-key').send(conversion).expect(200);
+      expect(duplicate.body.deduped).toBe(true);
     });
 
-    it('should store non-conversion events independently without applying deduplication', async () => {
-      const res1 = await request(app)
-        .post('/api/v1/events/telemetry')
-        .set('x-api-key', 'dev-api-key')
-        .send(validGeneralEvent)
-        .expect(200);
-
-      expect(res1.body.deduped).toBe(false);
-
-      const res2 = await request(app)
-        .post('/api/v1/events/telemetry')
-        .set('x-api-key', 'dev-api-key')
-        .send(validGeneralEvent)
-        .expect(200);
-
-      expect(res2.body.deduped).toBe(false);
-
-      const count = await db.one('SELECT count(*)::int FROM telemetry_events WHERE event_type = $1', ['commerce']);
-      expect(count.count).toBe(2);
+    it('keeps the variant-key contract for non-conversion telemetry', async () => {
+      const exposure = exposureFor('visitor_general');
+      await request(app).post('/api/v1/events/telemetry').set('x-api-key', 'dev-api-key').send({
+        visitorId: exposure.visitorId, experimentKey: experiment.key, variantKey: exposure.variantKey,
+        eventType: 'commerce', eventName: 'add_to_cart'
+      }).expect(200);
     });
   });
 });
