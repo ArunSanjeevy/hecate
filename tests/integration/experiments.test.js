@@ -112,6 +112,26 @@ describe('Experiment CRUD (Phase 1)', () => {
       expect(res.body.message).toContain('keys must be unique');
     });
 
+    it('should require content for every variant when content delivery is enabled', async () => {
+      const payload = {
+        key: 'partial_content',
+        status: 'draft',
+        variants: [
+          { key: 'control', allocation: 50, content: { type: 'static_text', text: 'Control copy' } },
+          { key: 'treatment', allocation: 50 }
+        ]
+      };
+
+      const res = await request(app)
+        .post('/api/v1/experiments')
+        .set('x-api-key', 'dev-api-key')
+        .send(payload)
+        .expect(400);
+
+      expect(res.body.error_code).toBe('invalid_payload');
+      expect(res.body.message).toContain('Content must be defined for every variant');
+    });
+
     it('should reject allocations that do not total 100', async () => {
       const payload = {
         key: 'checkout_button_text',

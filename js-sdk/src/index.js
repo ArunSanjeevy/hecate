@@ -193,10 +193,7 @@ class HecateClient {
     const missingKeys = experimentKeys.filter(key => !(key in this.assignments));
 
     if (missingKeys.length === 0) {
-      return experimentKeys.map(key => ({
-        experimentKey: key,
-        variantKey: this.assignments[key]
-      }));
+      return experimentKeys.map(key => this.assignments[key]);
     }
 
     try {
@@ -210,7 +207,7 @@ class HecateClient {
 
       if (response && Array.isArray(response.assignments)) {
         response.assignments.forEach(item => {
-          this.assignments[item.experimentKey] = item.variantKey;
+          this.assignments[item.experimentKey] = item;
         });
       }
 
@@ -226,21 +223,28 @@ class HecateClient {
       this._handleError(err, { type: 'assignment_request_failed', keys: missingKeys });
     }
 
-    return experimentKeys.map(key => ({
+    return experimentKeys.map(key => this.assignments[key] || {
       experimentKey: key,
-      variantKey: this.assignments[key]
-    }));
+      variantKey: undefined
+    });
   }
 
   getVariant(experimentKey, fallbackVariant = 'control') {
     if (experimentKey in this.assignments) {
-      return this.assignments[experimentKey];
+      return this.assignments[experimentKey].variantKey;
     }
     return fallbackVariant;
   }
 
+  getContent(experimentKey, fallbackContent = undefined) {
+    if (experimentKey in this.assignments && this.assignments[experimentKey].content) {
+      return this.assignments[experimentKey].content;
+    }
+    return fallbackContent;
+  }
+
   trackExposure(experimentKey, metadata = {}) {
-    const variantKey = this.assignments[experimentKey];
+    const variantKey = this.assignments[experimentKey]?.variantKey;
     if (!variantKey) {
       this._handleError(new Error(`Cannot track exposure: no assignment cached for experiment '${experimentKey}'`));
       return Promise.resolve();
@@ -270,7 +274,7 @@ class HecateClient {
   }
 
   trackTelemetry({ experimentKey, eventType, eventName, metadata = {} }) {
-    const variantKey = this.assignments[experimentKey];
+    const variantKey = this.assignments[experimentKey]?.variantKey;
     if (!variantKey) {
       this._handleError(new Error(`Cannot track telemetry: no assignment cached for experiment '${experimentKey}'`));
       return Promise.resolve();

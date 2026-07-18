@@ -167,6 +167,22 @@ describe('Hecate Browser JS SDK Suite', () => {
       expect(result2).toEqual([{ experimentKey: 'homepage_hero', variantKey: 'treatment' }]);
     });
 
+    it('should expose static content returned with an assignment', async () => {
+      const content = { type: 'static_text', text: 'Find your next favorite.' };
+      mockFetchResponse(200, {
+        assignments: [{ experimentKey: 'homepage_tagline', variantKey: 'treatment', content }],
+        errors: []
+      });
+
+      const client = createHecateClient({ baseUrl: 'http://localhost:4000', visitorId: 'visitor_1' });
+      const assignments = await client.getAssignments(['homepage_tagline']);
+
+      expect(assignments).toEqual([{ experimentKey: 'homepage_tagline', variantKey: 'treatment', content }]);
+      expect(client.getVariant('homepage_tagline')).toBe('treatment');
+      expect(client.getContent('homepage_tagline')).toEqual(content);
+      expect(client.getContent('unknown_experiment', 'fallback')).toBe('fallback');
+    });
+
     it('should support multiple experiment keys and fetch only missing ones', async () => {
       mockFetchResponse(200, {
         assignments: [

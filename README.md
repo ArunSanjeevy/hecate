@@ -160,6 +160,36 @@ curl http://localhost:4000/api/v1/experiments/checkout_button_text \
   -H "Authorization: Bearer <token>"
 ```
 
+### Static text content
+
+An experiment can either return only the selected variant key or return static
+plain-text content with the selected variant. To enable content delivery, add a
+`content` object to **every** variant when creating or updating a draft
+experiment:
+
+```json
+{
+  "key": "homepage_tagline",
+  "status": "draft",
+  "variants": [
+    {
+      "key": "control",
+      "allocation": 50,
+      "content": { "type": "static_text", "text": "Shop smarter today." }
+    },
+    {
+      "key": "treatment",
+      "allocation": 50,
+      "content": { "type": "static_text", "text": "Find your next favorite." }
+    }
+  ]
+}
+```
+
+`static_text` is currently the only supported content type. Existing
+variant-only experiments remain supported. Content cannot be configured for
+only a subset of variants.
+
 ### 4. List Experiments
 `GET /api/v1/experiments`
 ```bash
@@ -182,7 +212,7 @@ curl -X PUT http://localhost:4000/api/v1/experiments/checkout_button_text \
   }'
 ```
 
-Only draft experiments can change variants or allocations. Active, paused, and
+Only draft experiments can change variants, allocations, or content. Active, paused, and
 archived configurations return `409 experiment_configuration_immutable`; create
 a new experiment key/version instead.
 
@@ -218,6 +248,26 @@ curl -X POST http://localhost:4000/api/v1/assignments \
     "experimentKeys": ["checkout_button_text"]
   }'
 ```
+
+For a content-enabled experiment, the selected assignment additionally includes
+the configured content:
+
+```json
+{
+  "assignments": [
+    {
+      "experimentKey": "homepage_tagline",
+      "variantKey": "treatment",
+      "content": {
+        "type": "static_text",
+        "text": "Find your next favorite."
+      }
+    }
+  ]
+}
+```
+
+The `content` property is omitted for variants without configured content.
 
 ### 10. Record Exposure Event
 `POST /api/v1/events/exposure`

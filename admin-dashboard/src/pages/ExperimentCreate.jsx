@@ -19,6 +19,7 @@ export default function ExperimentCreate() {
     defaultValues: {
       key: '',
       status: 'draft',
+      hasContent: false,
       variants: [
         { key: 'control', allocation: 50 },
         { key: 'treatment', allocation: 50 }
@@ -32,6 +33,7 @@ export default function ExperimentCreate() {
   });
 
   const watchedVariants = watch('variants') || [];
+  const hasContent = watch('hasContent');
   
   // Calculate total allocations
   const totalAllocation = watchedVariants.reduce((acc, curr) => {
@@ -51,11 +53,12 @@ export default function ExperimentCreate() {
 
   // Check if any variant key is empty
   const hasEmptyKeys = watchedVariants.some(v => !v.key || v.key.trim() === '');
+  const hasEmptyContent = hasContent && watchedVariants.some(v => !v.content?.text || v.content.text.trim() === '');
 
   // Form isValid determination
   const isAllocationValid = totalAllocation === 100;
   const isVariantsCountValid = watchedVariants.length >= 2;
-  const isFormValidLocally = isAllocationValid && isVariantsCountValid && !hasDuplicateKeys && !hasInvalidAllocations && !hasEmptyKeys;
+  const isFormValidLocally = isAllocationValid && isVariantsCountValid && !hasDuplicateKeys && !hasInvalidAllocations && !hasEmptyKeys && !hasEmptyContent;
 
   const onSubmit = async (data) => {
     if (!isFormValidLocally) return;
@@ -64,10 +67,16 @@ export default function ExperimentCreate() {
     const payload = {
       key: data.key.trim(),
       status: data.status,
-      variants: data.variants.map(v => ({
-        key: v.key.trim(),
-        allocation: Number(v.allocation)
-      }))
+      variants: data.variants.map(v => {
+        const variant = {
+          key: v.key.trim(),
+          allocation: Number(v.allocation)
+        };
+        if (data.hasContent) {
+          variant.content = { type: 'static_text', text: v.content.text.trim() };
+        }
+        return variant;
+      })
     };
 
     try {
@@ -149,6 +158,19 @@ export default function ExperimentCreate() {
 
         {/* Variants Section */}
         <div style={{ marginTop: '2rem' }}>
+          <div className="form-group">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input
+                type="checkbox"
+                {...register('hasContent')}
+                data-testid="content-enabled-checkbox"
+              />
+              Return plain-text content with each assignment
+            </label>
+            <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+              Each variant must include its own content when this is enabled.
+            </p>
+          </div>
           <div className="variants-container-header">
             <h3 style={{ fontSize: '1.125rem', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
               Variants Configuration
@@ -157,7 +179,7 @@ export default function ExperimentCreate() {
               type="button"
               className="btn btn-secondary btn-sm"
               style={{ padding: '0.375rem 0.75rem' }}
-              onClick={() => append({ key: '', allocation: 0 })}
+              onClick={() => append({ key: '', allocation: 0, content: hasContent ? { type: 'static_text', text: '' } : undefined })}
               data-testid="add-variant-btn"
             >
               <Plus size={16} />
@@ -183,6 +205,12 @@ export default function ExperimentCreate() {
             </p>
           )}
 
+          {hasEmptyContent && (
+            <p className="form-error" style={{ marginBottom: '1rem' }} data-testid="error-empty-content">
+              Content is required for every variant.
+            </p>
+          )}
+
           {/* Variants Rows */}
           {fields.map((field, index) => (
             <div key={field.id} className="variant-row" data-testid={`variant-row-${index}`}>
@@ -196,6 +224,19 @@ export default function ExperimentCreate() {
                   data-testid={`variant-key-input-${index}`}
                 />
               </div>
+
+              {hasContent && (
+                <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+                  <label className="form-label" style={{ fontSize: '0.8125rem' }}>Plain Text Content</label>
+                  <textarea
+                    placeholder="Text returned when this variant is assigned"
+                    className="form-input"
+                    rows={3}
+                    {...register(`variants.${index}.content.text`)}
+                    data-testid={`variant-content-input-${index}`}
+                  />
+                </div>
+              )}
 
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontSize: '0.8125rem' }}>Traffic Allocation (%)</label>
