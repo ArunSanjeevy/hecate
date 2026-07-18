@@ -1,7 +1,47 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Color Palette (Postman Slate Dark Style) */
+  /* Color Palette (Postman Calm White & Orange Style - Default Light) */
+  --bg-primary: #f8f9fa; /* Pastel/Calm White */
+  --bg-secondary: #ffffff; /* Crisp White Card background */
+  --bg-tertiary: #f1f3f5; /* Light Hover/Control background */
+  --border-color: #e9ecef; /* Thin soft borders */
+  
+  --text-primary: #212529; /* Deep Charcoal / Slate grey text */
+  --text-secondary: #495057; /* Slate grey text */
+  --text-muted: #6c757d; /* Soft grey text */
+  
+  --accent-primary: #ff6c37; /* Postman Orange */
+  --accent-secondary: #ff8552;
+  --accent-gradient: linear-gradient(135deg, #ff6c37 0%, #ff8552 100%);
+  --accent-hover: #e0531d;
+  
+  --success-color: #2b8a3e; /* Pastel/Soft green */
+  --success-bg: #ebfbee;
+  
+  --warning-color: #e67e22; /* Warm amber orange */
+  --warning-bg: #fff4e6;
+  
+  --danger-color: #e03131; /* Bright warm red */
+  --danger-bg: #fff5f5;
+  
+  --info-color: #1c7ed6; /* Soft blue */
+  --info-bg: #e7f5ff;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Outfit', sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 16px -6px rgba(0, 0, 0, 0.04);
+}
+
+/* Color Palette (Postman Slate Dark Style - Dark Mode Overrides) */
+[data-theme='dark'] {
   --bg-primary: #181818;
   --bg-secondary: #212121;
   --bg-tertiary: #2e2e2e;
@@ -11,29 +51,17 @@
   --text-secondary: #bfbfbf;
   --text-muted: #8c8c8c;
   
-  --accent-primary: #ff6c37; /* Postman Orange */
-  --accent-secondary: #ff8552;
-  --accent-gradient: linear-gradient(135deg, #ff6c37 0%, #ff8552 100%);
-  --accent-hover: #e0531d;
-  
-  --success-color: #25a244; /* Postman Green */
+  --success-color: #25a244;
   --success-bg: rgba(37, 162, 68, 0.15);
   
-  --warning-color: #e5a93c; /* Postman Yellow/Gold */
+  --warning-color: #e5a93c;
   --warning-bg: rgba(229, 169, 60, 0.15);
   
-  --danger-color: #ef4444; /* Postman Red */
+  --danger-color: #ef4444;
   --danger-bg: rgba(239, 68, 68, 0.15);
   
-  --info-color: #0284c7; /* Sky blue */
+  --info-color: #0284c7;
   --info-bg: rgba(2, 132, 199, 0.15);
-
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-display: 'Outfit', sans-serif;
-
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
   
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);

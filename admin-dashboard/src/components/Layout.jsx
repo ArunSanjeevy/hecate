@@ -1,16 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Beaker, Menu, X, Activity } from 'lucide-react';
+import { LayoutDashboard, Beaker, Menu, X, Activity, Sun, Moon } from 'lucide-react';
 
 export default function Layout({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [backendStatus, setBackendStatus] = useState('checking'); // checking, online, offline
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('hecate-theme') || 'light';
+  });
   const location = useLocation();
 
   useEffect(() => {
     // Close mobile menu on route change
     setMobileMenuOpen(false);
   }, [location]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('hecate-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -87,13 +99,36 @@ export default function Layout({ children }) {
       <div className="main-content">
         <header className="header-bar">
           <h1 className="header-title">{getPageTitle()}</h1>
-          <div className="api-status">
-            <Activity size={16} />
-            <span>API: </span>
-            <div className={`status-dot ${backendStatus === 'online' ? 'online' : 'offline'}`} />
-            <span style={{ textTransform: 'capitalize', fontWeight: 600 }}>
-              {backendStatus}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button
+              onClick={toggleTheme}
+              className="btn btn-secondary btn-sm"
+              style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                padding: '0.25rem', 
+                borderRadius: '50%',
+                border: '1px solid var(--border-color)',
+                width: '32px',
+                height: '32px',
+                cursor: 'pointer',
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)'
+              }}
+              aria-label="Toggle Theme"
+              data-testid="theme-toggle"
+            >
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
+            <div className="api-status">
+              <Activity size={16} />
+              <span>API: </span>
+              <div className={`status-dot ${backendStatus === 'online' ? 'online' : 'offline'}`} />
+              <span style={{ textTransform: 'capitalize', fontWeight: 600 }}>
+                {backendStatus}
+              </span>
+            </div>
           </div>
         </header>
 

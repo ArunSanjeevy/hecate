@@ -118,7 +118,7 @@ export default function Overview() {
           <div className="chart-container" data-testid="status-chart">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={statusData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                 <XAxis dataKey="name" stroke="var(--text-secondary)" tickLine={false} />
                 <YAxis stroke="var(--text-secondary)" tickLine={false} allowDecimals={false} />
                 <Tooltip 
