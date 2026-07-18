@@ -15,10 +15,12 @@ const env = process.env.NODE_ENV;
 const config = require(path.join(__dirname, `./config/${env}-config.js`));
 const logger = require('./lib/helpers/logger');
 const errorHandler = require('./lib/middlewares/errorHandler');
-const { auth } = require('./lib/middlewares/authenticateRoute');
+const { authSdk, authControlPlane, authUser } = require('./lib/middlewares/authenticateRoute');
 
 // Import routes
 const healthRoute = require('./lib/routes/health-routes');
+const authRoutes = require('./lib/routes/auth-routes');
+const keysRoutes = require('./lib/routes/keys-routes');
 const experimentsRoutes = require('./lib/routes/experiments-routes');
 const assignmentsRoutes = require('./lib/routes/assignments-routes');
 const eventsRoutes = require('./lib/routes/events-routes');
@@ -42,16 +44,19 @@ if (env !== 'test') {
 
 // Public routes
 app.use('/', healthRoute);
+app.use('/api/v1/auth', authRoutes);
 app.use('/sdk', (req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 }, express.static(path.join(__dirname, 'js-sdk/dist')));
 
-// Protected routes (require x-api-key)
-app.use('/api/v1/experiments', auth, experimentsRoutes);
-app.use('/api/v1/assignments', auth, assignmentsRoutes);
-app.use('/api/v1/events', auth, eventsRoutes);
-app.use('/api/v1/results', auth, resultsRoutes);
+// The SDK receives only assignment/event access. Dashboard control-plane
+// operations require a user JWT or a trusted server-side service key.
+app.use('/api/v1/keys', authUser, keysRoutes);
+app.use('/api/v1/experiments', authControlPlane, experimentsRoutes);
+app.use('/api/v1/assignments', authSdk, assignmentsRoutes);
+app.use('/api/v1/events', authSdk, eventsRoutes);
+app.use('/api/v1/results', authControlPlane, resultsRoutes);
 
 // 404 Route handler
 app.use((req, res, next) => {

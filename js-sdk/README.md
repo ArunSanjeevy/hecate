@@ -186,10 +186,6 @@ To maintain data accuracy, assignments and exposures are strictly decoupled:
 ## 🔒 Security Note: Browser API Keys
 
 > [!CAUTION]
-> **Production API Key Warning**
-> The current backend setup uses a shared, full-privilege API key (`x-api-key`). 
-> **Never hardcode or expose your write-access backend API key in production client-side bundles.**
+> **Use an SDK key only.** The backend restricts SDK keys to assignment and event-ingestion routes. They cannot manage experiments, retrieve results, or manage keys. A service key or dashboard JWT must never be embedded in browser code.
 >
-> For production deployment, we recommend one of the following architectures:
-> 1. **Publishable Keys**: Configure the backend to accept restricted, read-only "Publishable SDK Keys" which restrict operations to public client endpoints and enforce origin restrictions (CORS).
-> 2. **Proxy Service (Backend-for-Frontend)**: Route the SDK requests through your own web application backend (BFF), which appends the secure `x-api-key` header before forwarding the requests to the Hecate experimentation service.
+> SDK keys are still bearer credentials: rotate them, set expirations, rate-limit the ingestion endpoints, and use allowed-origin checks as a defense-in-depth measure. Origin checks do not replace authorization.
