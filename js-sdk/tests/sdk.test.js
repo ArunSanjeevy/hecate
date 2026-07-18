@@ -366,12 +366,12 @@ describe('Hecate Browser JS SDK Suite', () => {
       expect(payload).toEqual({
         visitorId: 'visitor_1',
         experimentKey: 'homepage_hero',
-        variantKey: 'treatment',
         eventType: 'conversion',
         eventName: 'order_placed',
         occurredAt: expect.any(String),
         metadata: { value: 99.99 }
       });
+      expect(payload.variantKey).toBeUndefined();
     });
 
     it('should reject telemetry tracking locally when no assignment exists', async () => {
@@ -507,6 +507,23 @@ describe('Hecate Browser JS SDK Suite', () => {
         eventName: 'add_to_cart'
       });
       expect(global.fetch).toHaveBeenCalledTimes(3); // 2 + 1 telemetry (no retry)
+    });
+
+    it('sends assignment_mismatch and exposure_not_found responses to onError without retrying', async () => {
+      mockFetchResponse(200, { assignments: [{ experimentKey: 'homepage_hero', variantKey: 'treatment' }], errors: [] });
+      const onErrorMock = jest.fn();
+      const client = createHecateClient({ baseUrl: 'http://localhost:4000', visitorId: 'visitor_1', onError: onErrorMock });
+      await client.getAssignments(['homepage_hero']);
+
+      global.fetch.mockImplementationOnce(() => Promise.resolve({ ok: false, status: 409, json: () => Promise.resolve({ error_code: 'assignment_mismatch' }) }));
+      await client.trackExposure('homepage_hero');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(onErrorMock.mock.calls[0][0].errorCode).toBe('assignment_mismatch');
+
+      global.fetch.mockImplementationOnce(() => Promise.resolve({ ok: false, status: 409, json: () => Promise.resolve({ error_code: 'exposure_not_found' }) }));
+      await client.trackTelemetry({ experimentKey: 'homepage_hero', eventType: 'conversion', eventName: 'order_placed' });
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expect(onErrorMock.mock.calls[1][0].errorCode).toBe('exposure_not_found');
     });
   });
 });

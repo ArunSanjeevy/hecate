@@ -15,6 +15,11 @@ function LogoutControl() { const { logout } = useAuth(); return <button onClick=
 
 describe('authentication screens and routing', () => {
   beforeEach(() => { sessionStorage.clear(); vi.clearAllMocks(); });
+  it('shows the backend health indicator on the login page', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'ok' }) }));
+    render(<AuthPage mode="login" />, { wrapper: wrap });
+    expect(await screen.findByLabelText('Backend API online')).toBeInTheDocument();
+  });
   it('logs in and saves the current-session token', async () => {
     apiClient.login.mockResolvedValue({ token: 'jwt-token', user: { email: 'me@example.com' } });
     render(<AuthPage mode="login" />, { wrapper: wrap });

@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS exposure_events (
     variant_key TEXT NOT NULL,
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     metadata JSONB,
-    UNIQUE(experiment_key, visitor_id, variant_key)
+    UNIQUE(experiment_key, visitor_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_exposure_events_visitor_exp

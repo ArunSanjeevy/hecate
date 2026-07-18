@@ -19,7 +19,11 @@ describe('API keys page', () => {
     expect(await screen.findByText('hk_12****abcd')).toBeInTheDocument();
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Name'), 'Staging');
+    await user.clear(screen.getByLabelText('Expiration duration'));
+    await user.type(screen.getByLabelText('Expiration duration'), '2');
+    await user.selectOptions(screen.getByLabelText('Expiration unit'), 'week');
     await user.click(screen.getByRole('button', { name: 'Create key' }));
+    await waitFor(() => expect(apiClient.createKey.mock.calls[0][0]).toEqual(expect.objectContaining({ name: 'Staging', expiresAt: expect.any(String) })));
     expect(await screen.findByText('hk_new_once')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Copy key' }));
     expect(await screen.findByRole('button', { name: 'Close' })).toBeInTheDocument();

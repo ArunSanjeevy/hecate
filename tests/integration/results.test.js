@@ -4,8 +4,15 @@ const request = require('supertest');
 const app = require('../../app');
 const { db } = require('../../lib/data-accessors/db');
 const { disconnectRedis, flushAll } = require('../../lib/cache/redis');
+const { assignVariant } = require('../../lib/helpers/assignment-engine');
 
 describe('Results API (Phase 5)', () => {
+  const experiment = {
+    key: 'checkout_button_text',
+    status: 'active',
+    variants: [{ key: 'control', allocation: 50 }, { key: 'treatment', allocation: 50 }]
+  };
+  const variantFor = visitorId => assignVariant(visitorId, experiment);
   beforeAll(async () => {
     const migrate = require('../../lib/helpers/migrate');
     await migrate();
@@ -21,14 +28,7 @@ describe('Results API (Phase 5)', () => {
     await request(app)
       .post('/api/v1/experiments')
       .set('x-api-key', 'dev-api-key')
-      .send({
-        key: 'checkout_button_text',
-        status: 'active',
-        variants: [
-          { key: 'control', allocation: 50 },
-          { key: 'treatment', allocation: 50 }
-        ]
-      })
+      .send(experiment)
       .expect(201);
   });
 
@@ -40,34 +40,27 @@ describe('Results API (Phase 5)', () => {
   describe('GET /api/v1/results/:experimentKey', () => {
     it('should aggregate exposures and conversions correctly', async () => {
       // 1. Log exposures
-      await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send({
-        visitorId: 'visitor1', experimentKey: 'checkout_button_text', variantKey: 'control'
-      }).expect(200);
-
-      await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send({
-        visitorId: 'visitor2', experimentKey: 'checkout_button_text', variantKey: 'treatment'
-      }).expect(200);
-
-      await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send({
-        visitorId: 'visitor3', experimentKey: 'checkout_button_text', variantKey: 'treatment'
-      }).expect(200);
+      for (const visitorId of ['visitor1', 'visitor2', 'visitor3']) {
+        await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send({
+          visitorId, experimentKey: experiment.key, variantKey: variantFor(visitorId)
+        }).expect(200);
+      }
 
       // 2. Log conversions
       await request(app).post('/api/v1/events/telemetry').set('x-api-key', 'dev-api-key').send({
-        visitorId: 'visitor1', experimentKey: 'checkout_button_text', variantKey: 'control',
+        visitorId: 'visitor1', experimentKey: 'checkout_button_text',
         eventType: 'conversion', eventName: 'order_placed'
       }).expect(200);
 
       await request(app).post('/api/v1/events/telemetry').set('x-api-key', 'dev-api-key').send({
-        visitorId: 'visitor2', experimentKey: 'checkout_button_text', variantKey: 'treatment',
+        visitorId: 'visitor2', experimentKey: 'checkout_button_text',
         eventType: 'conversion', eventName: 'order_placed'
       }).expect(200);
 
-      // visitor4 converts BUT has NO exposure event (should be excluded!)
+      // visitor4 converts without an exposure and is rejected before results.
       await request(app).post('/api/v1/events/telemetry').set('x-api-key', 'dev-api-key').send({
-        visitorId: 'visitor4', experimentKey: 'checkout_button_text', variantKey: 'treatment',
-        eventType: 'conversion', eventName: 'order_placed'
-      }).expect(200);
+        visitorId: 'visitor4', experimentKey: 'checkout_button_text', eventType: 'conversion', eventName: 'order_placed'
+      }).expect(409);
 
       // 3. Get results
       const res = await request(app)
@@ -78,31 +71,30 @@ describe('Results API (Phase 5)', () => {
       expect(res.body.experimentKey).toBe('checkout_button_text');
       expect(res.body.variants.length).toBe(2);
 
-      const control = res.body.variants.find(v => v.variantKey === 'control');
-      expect(control.exposures).toBe(1);
-      expect(control.conversions).toBe(1);
-      expect(control.conversionRate).toBe(1.0);
-
-      const treatment = res.body.variants.find(v => v.variantKey === 'treatment');
-      expect(treatment.exposures).toBe(2);
-      expect(treatment.conversions).toBe(1); // visitor2 converts, visitor4 is excluded
-      expect(treatment.conversionRate).toBe(0.5);
+      for (const variantKey of ['control', 'treatment']) {
+        const expectedExposures = ['visitor1', 'visitor2', 'visitor3'].filter(visitorId => variantFor(visitorId) === variantKey).length;
+        const expectedConversions = ['visitor1', 'visitor2'].filter(visitorId => variantFor(visitorId) === variantKey).length;
+        const result = res.body.variants.find(v => v.variantKey === variantKey);
+        expect(result.exposures).toBe(expectedExposures);
+        expect(result.conversions).toBe(expectedConversions);
+        expect(result.conversionRate).toBe(expectedExposures ? expectedConversions / expectedExposures : 0);
+      }
     });
 
     it('should handle duplicate events without inflating counts', async () => {
       await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send({
-        visitorId: 'visitor1', experimentKey: 'checkout_button_text', variantKey: 'control'
+        visitorId: 'visitor1', experimentKey: 'checkout_button_text', variantKey: variantFor('visitor1')
       });
       await request(app).post('/api/v1/events/exposure').set('x-api-key', 'dev-api-key').send({
-        visitorId: 'visitor1', experimentKey: 'checkout_button_text', variantKey: 'control'
+        visitorId: 'visitor1', experimentKey: 'checkout_button_text', variantKey: variantFor('visitor1')
       });
 
       await request(app).post('/api/v1/events/telemetry').set('x-api-key', 'dev-api-key').send({
-        visitorId: 'visitor1', experimentKey: 'checkout_button_text', variantKey: 'control',
+        visitorId: 'visitor1', experimentKey: 'checkout_button_text',
         eventType: 'conversion', eventName: 'order_placed'
       });
       await request(app).post('/api/v1/events/telemetry').set('x-api-key', 'dev-api-key').send({
-        visitorId: 'visitor1', experimentKey: 'checkout_button_text', variantKey: 'control',
+        visitorId: 'visitor1', experimentKey: 'checkout_button_text',
         eventType: 'conversion', eventName: 'order_placed'
       });
 
@@ -111,10 +103,10 @@ describe('Results API (Phase 5)', () => {
         .set('x-api-key', 'dev-api-key')
         .expect(200);
 
-      const control = res.body.variants.find(v => v.variantKey === 'control');
-      expect(control.exposures).toBe(1);
-      expect(control.conversions).toBe(1);
-      expect(control.conversionRate).toBe(1.0);
+      const result = res.body.variants.find(v => v.variantKey === variantFor('visitor1'));
+      expect(result.exposures).toBe(1);
+      expect(result.conversions).toBe(1);
+      expect(result.conversionRate).toBe(1.0);
     });
 
     it('should return zero exposures and zero conversions for fresh variants safely', async () => {

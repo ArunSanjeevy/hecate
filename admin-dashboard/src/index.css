@@ -145,6 +145,7 @@ button, input, select, textarea {
 }
 
 .auth-page { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
+.auth-api-status { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 1; }
 .auth-card { width: min(100%, 440px); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 2rem; }
 .auth-card .logo-icon { margin-bottom: 1.25rem; }
 .auth-card h1 { font-family: var(--font-display); font-size: 1.75rem; margin-bottom: 1rem; }
