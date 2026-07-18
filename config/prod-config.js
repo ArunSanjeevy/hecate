@@ -3,7 +3,7 @@
 module.exports = {
   env: 'prod',
   port: process.env.PORT || 4000,
-  apiKey: process.env.API_KEY,
+  apiKey: process.env.API_KEY || process.env.VITE_HECATE_API_KEY,
   postgres: {
     connectionString: process.env.DATABASE_URL,
     maxConnections: 20,
