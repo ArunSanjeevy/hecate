@@ -24,12 +24,12 @@ describe('Authentication and API key management', () => {
     .post('/api/v1/auth/signup')
     .send({ email, password: 'correct-horse-battery-staple' });
 
-  it('registers a user and returns their initial API key once', async () => {
+  it('registers a user without creating an SDK key', async () => {
     const res = await signup().expect(201);
 
     expect(res.body.status).toBe('success');
     expect(res.body.user.email).toBe('owner@example.com');
-    expect(res.body.apiKey).toMatch(/^hk_[a-f0-9]{48}$/);
+    expect(res.body.apiKey).toBeUndefined();
   });
 
   it('rejects duplicate emails and invalid login credentials', async () => {
@@ -49,7 +49,7 @@ describe('Authentication and API key management', () => {
     }).expect(200);
 
     expect(login.body.token).toEqual(expect.any(String));
-    expect(login.body.apiKeys[0].apiKey).toContain('*');
+    expect(login.body.apiKeys).toEqual([]);
 
     const authorization = `Bearer ${login.body.token}`;
     const created = await request(app)
@@ -63,7 +63,7 @@ describe('Authentication and API key management', () => {
       .get('/api/v1/keys')
       .set('Authorization', authorization)
       .expect(200);
-    expect(listed.body.keys).toHaveLength(2);
+    expect(listed.body.keys).toHaveLength(1);
     expect(listed.body.keys.every((key) => key.apiKey.includes('*'))).toBe(true);
 
     await request(app)
@@ -74,12 +74,17 @@ describe('Authentication and API key management', () => {
   });
 
   it('limits SDK keys to SDK routes while allowing the user JWT on the control plane', async () => {
-    const registration = await signup('scoped-owner@example.com').expect(201);
-    const sdkKey = registration.body.apiKey;
+    await signup('scoped-owner@example.com').expect(201);
     const login = await request(app).post('/api/v1/auth/login').send({
       email: 'scoped-owner@example.com',
       password: 'correct-horse-battery-staple'
     }).expect(200);
+    const createdKey = await request(app)
+      .post('/api/v1/keys')
+      .set('Authorization', `Bearer ${login.body.token}`)
+      .send({ name: 'Browser SDK' })
+      .expect(201);
+    const sdkKey = createdKey.body.key.apiKey;
     const experiment = {
       key: 'jwt_control_plane',
       status: 'active',

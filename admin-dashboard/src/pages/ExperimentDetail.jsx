@@ -29,7 +29,6 @@ export default function ExperimentDetail() {
     mode: 'all',
     defaultValues: {
       key: '',
-      salt: '',
       status: 'draft',
       variants: []
     }
@@ -47,7 +46,6 @@ export default function ExperimentDetail() {
       setOriginalExperiment(data.experiment);
       reset({
         key: data.experiment.key,
-        salt: data.experiment.salt,
         status: data.experiment.status,
         variants: data.experiment.variants?.map(v => ({ key: v.key, allocation: v.allocation })) || []
       });
@@ -68,7 +66,6 @@ export default function ExperimentDetail() {
       setOriginalExperiment(data.experiment);
       reset({
         key: data.experiment.key,
-        salt: data.experiment.salt,
         status: data.experiment.status,
         variants: data.experiment.variants?.map(v => ({ key: v.key, allocation: v.allocation })) || []
       });
@@ -110,7 +107,6 @@ export default function ExperimentDetail() {
     if (experiment) {
       reset({
         key: experiment.key,
-        salt: experiment.salt,
         status: experiment.status,
         variants: experiment.variants?.map(v => ({ key: v.key, allocation: v.allocation })) || []
       });
@@ -410,19 +406,6 @@ export default function ExperimentDetail() {
           />
         </div>
 
-        {/* Salt (Read-only) */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="experiment-salt">Assignment Salt</label>
-          <input
-            id="experiment-salt"
-            type="text"
-            className="form-input"
-            readOnly
-            {...register('salt')}
-            data-testid="field-salt"
-          />
-        </div>
-
         {/* Experiment Status */}
         <div className="form-group">
           <label className="form-label" htmlFor="experiment-status">Status</label>
@@ -547,7 +530,6 @@ export default function ExperimentDetail() {
                 if (originalExperiment) {
                   reset({
                     key: originalExperiment.key,
-                    salt: originalExperiment.salt,
                     status: originalExperiment.status,
                     variants: originalExperiment.variants?.map(v => ({ key: v.key, allocation: v.allocation })) || []
                   });

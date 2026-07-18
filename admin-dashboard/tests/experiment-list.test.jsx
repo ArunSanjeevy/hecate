@@ -35,7 +35,6 @@ describe('Experiment List Page', () => {
     {
       key: 'checkout_btn_text',
       status: 'active',
-      salt: 'v1',
       variants: [
         { key: 'control', allocation: 50 },
         { key: 'treatment', allocation: 50 }
@@ -44,7 +43,6 @@ describe('Experiment List Page', () => {
     {
       key: 'homepage_banner',
       status: 'draft',
-      salt: 'v2',
       variants: [
         { key: 'control', allocation: 60 },
         { key: 'variant_a', allocation: 20 },
@@ -54,7 +52,6 @@ describe('Experiment List Page', () => {
     {
       key: 'pricing_tier',
       status: 'paused',
-      salt: 'v3',
       variants: [
         { key: 'control', allocation: 90 },
         { key: 'treatment', allocation: 10 }

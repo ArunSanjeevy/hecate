@@ -121,6 +121,16 @@ curl -X POST http://localhost:4000/api/v1/auth/login \
 
 Use the returned token as `Authorization: Bearer <token>` for the control-plane examples below. Use an SDK key as `x-api-key` only for assignments and events.
 
+Sign-up does not create an SDK key. After logging in, create one explicitly and
+copy the returned value immediately:
+
+```bash
+curl -X POST http://localhost:4000/api/v1/keys \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"name":"Website production"}'
+```
+
 ### 1. Health Check (Public)
 `GET /health`
 ```bash

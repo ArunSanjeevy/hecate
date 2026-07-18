@@ -1,5 +1,4 @@
 -- Fresh-install schema for the Hecate experimentation backend.
--- This file defines the current database shape; it does not contain upgrade-only ALTER statements.
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -32,7 +31,6 @@ CREATE TABLE IF NOT EXISTS experiments (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     key TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL,
-    salt TEXT NOT NULL,
     variants JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP

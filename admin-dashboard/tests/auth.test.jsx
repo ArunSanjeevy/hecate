@@ -23,14 +23,13 @@ describe('authentication screens and routing', () => {
     await user.click(screen.getByRole('button', { name: 'Log in' }));
     await waitFor(() => expect(sessionStorage.getItem('hecate-dashboard-session')).toContain('jwt-token'));
   });
-  it('does not interrupt signup with an SDK key', async () => {
-    apiClient.signup.mockResolvedValue({ apiKey: 'hk_once_only' });
+  it('directs a new user to log in before creating an SDK key', async () => {
+    apiClient.signup.mockResolvedValue({ user: { email: 'me@example.com' } });
     render(<AuthPage mode="signup" />, { wrapper: wrap });
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Email'), 'me@example.com'); await user.type(screen.getByLabelText('Password'), 'password123');
     await user.click(screen.getByRole('button', { name: 'Create account' }));
     expect(await screen.findByText(/Account created/i)).toBeInTheDocument();
-    expect(screen.queryByText('hk_once_only')).not.toBeInTheDocument();
   });
   it('redirects unauthenticated protected routes to login', () => {
     render(<Routes><Route element={<ProtectedRoute />}><Route path="/" element={<div>Private</div>} /></Route><Route path="/login" element={<div>Login screen</div>} /></Routes>, { wrapper: wrap });

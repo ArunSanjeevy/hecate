@@ -30,8 +30,8 @@ const seed = async () => {
     } else {
       logger.info(`Creating experiment '${experimentKey}'...`);
       await db.none(
-        'INSERT INTO experiments (key, status, salt, variants) VALUES ($1, $2, $3, $4::jsonb)',
-        [experimentKey, 'active', 'v1', JSON.stringify(variants)]
+        'INSERT INTO experiments (key, status, variants, user_id) VALUES ($1, $2, $3::jsonb, $4)',
+        [experimentKey, 'active', JSON.stringify(variants), '00000000-0000-0000-0000-000000000000']
       );
       logger.info(`Experiment '${experimentKey}' created successfully.`);
     }
@@ -40,7 +40,6 @@ const seed = async () => {
     await redisCache.set(`experiment:${experimentKey}`, {
       key: experimentKey,
       status: 'active',
-      salt: 'v1',
       variants
     });
     await redisCache.disconnectRedis();
