@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BrowserRouter } from 'react-router-dom';
 import Layout from '../src/components/Layout';
+import { AuthProvider } from '../src/auth/AuthContext';
 
 describe('Layout component', () => {
   beforeEach(() => {
@@ -13,9 +14,7 @@ describe('Layout component', () => {
   it('should render with default light theme and toggle to dark theme', () => {
     render(
       <BrowserRouter>
-        <Layout>
-          <div>Content</div>
-        </Layout>
+        <AuthProvider><Layout><div>Content</div></Layout></AuthProvider>
       </BrowserRouter>
     );
 
@@ -41,9 +40,7 @@ describe('Layout component', () => {
 
     render(
       <BrowserRouter>
-        <Layout>
-          <div>Content</div>
-        </Layout>
+        <AuthProvider><Layout><div>Content</div></Layout></AuthProvider>
       </BrowserRouter>
     );
 

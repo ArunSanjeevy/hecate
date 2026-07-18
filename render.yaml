@@ -1,9 +1,3 @@
-envVarGroups:
-  - name: hecate-shared-secrets
-    envVars:
-      - key: VITE_HECATE_API_KEY
-        generateValue: true # Generates a secure API key automatically, shared by both services
-
 services:
   # 1. Hecate Express Backend
   - type: web
@@ -14,7 +8,6 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - fromGroup: hecate-shared-secrets
       - key: NODE_ENV
         value: prod
       - key: DATABASE_URL
@@ -41,6 +34,5 @@ services:
         source: /*
         destination: /index.html
     envVars:
-      - fromGroup: hecate-shared-secrets
       - key: VITE_HECATE_API_URL
         sync: false # Paste the public URL of your backend service here (e.g. https://hecate-backend.onrender.com)
