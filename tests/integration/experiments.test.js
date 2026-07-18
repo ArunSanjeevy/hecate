@@ -45,7 +45,6 @@ describe('Experiment CRUD (Phase 1)', () => {
       expect(res.body.status).toBe('success');
       expect(res.body.experiment.key).toBe('checkout_button_text');
       expect(res.body.experiment.status).toBe('active');
-      expect(res.body.experiment.salt).toBe('v1');
       expect(res.body.experiment.variants).toEqual(validExperiment.variants);
 
       // Verify stored in PostgreSQL
@@ -337,7 +336,7 @@ describe('Experiment CRUD (Phase 1)', () => {
 
   describe('multi-tenant isolation', () => {
     const createUser = async (email) => {
-      const registration = await request(app)
+      await request(app)
         .post('/api/v1/auth/signup')
         .send({ email, password: 'correct-horse-battery-staple' })
         .expect(201);
@@ -345,10 +344,13 @@ describe('Experiment CRUD (Phase 1)', () => {
         .post('/api/v1/auth/login')
         .send({ email, password: 'correct-horse-battery-staple' })
         .expect(200);
-      return {
-        apiKey: registration.body.apiKey,
-        authorization: `Bearer ${login.body.token}`
-      };
+      const authorization = `Bearer ${login.body.token}`;
+      const key = await request(app)
+        .post('/api/v1/keys')
+        .set('Authorization', authorization)
+        .send({ name: 'Isolation SDK' })
+        .expect(201);
+      return { apiKey: key.body.key.apiKey, authorization };
     };
 
     it('does not allow a second tenant to read or mutate an experiment', async () => {

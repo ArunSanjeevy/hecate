@@ -48,7 +48,6 @@ describe('Experiment Detail / Edit Page', () => {
   const mockExperiment = {
     key: 'checkout_btn_text',
     status: 'active',
-    salt: 'v1',
     variants: [
       { key: 'control', allocation: 50 },
       { key: 'treatment', allocation: 50 }
@@ -67,14 +66,10 @@ describe('Experiment Detail / Edit Page', () => {
 
     await screen.findByTestId('detail-title');
 
-    // Key and salt should be read-only
+    // The experiment key is read-only.
     const keyField = screen.getByTestId('field-key');
     expect(keyField).toHaveValue('checkout_btn_text');
     expect(keyField).toHaveAttribute('readonly');
-
-    const saltField = screen.getByTestId('field-salt');
-    expect(saltField).toHaveValue('v1');
-    expect(saltField).toHaveAttribute('readonly');
 
     // Status and variants are filled and editable
     const statusField = screen.getByTestId('field-status');
@@ -125,7 +120,6 @@ describe('Experiment Detail / Edit Page', () => {
       experiment: {
         key: 'checkout_btn_text',
         status: 'paused',
-        salt: 'v1',
         variants: [
           { key: 'control', allocation: 90 },
           { key: 'treatment', allocation: 10 }
@@ -265,9 +259,8 @@ describe('Experiment Detail / Edit Page', () => {
 
     await screen.findByTestId('detail-title');
 
-    // Key, salt, and status should be disabled / readonly
+    // Key and status should be disabled / readonly.
     expect(screen.getByTestId('field-key')).toHaveAttribute('readonly');
-    expect(screen.getByTestId('field-salt')).toHaveAttribute('readonly');
     expect(screen.getByTestId('field-status')).toBeDisabled();
 
     // Variant key inputs and allocations should be disabled

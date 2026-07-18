@@ -121,7 +121,6 @@ export default function ExperimentList() {
               <tr>
                 <th>Experiment Key</th>
                 <th>Status</th>
-                <th>Salt</th>
                 <th>Variants</th>
                 <th>Allocation Summary</th>
                 <th>Actions</th>
@@ -143,9 +142,6 @@ export default function ExperimentList() {
                       <span className={`badge ${e.status}`}>
                         {e.status}
                       </span>
-                    </td>
-                    <td style={{ fontFamily: 'monospace', color: 'var(--text-muted)' }}>
-                      {e.salt}
                     </td>
                     <td>{variantCount}</td>
                     <td style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>

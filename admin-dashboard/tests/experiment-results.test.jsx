@@ -52,7 +52,6 @@ describe('Experiment Results Page', () => {
   const mockExperiment = {
     key: 'checkout_btn_text',
     status: 'active',
-    salt: 'v1',
     variants: [
       { key: 'control', allocation: 50 },
       { key: 'treatment', allocation: 50 }

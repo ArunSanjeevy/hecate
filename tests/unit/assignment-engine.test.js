@@ -6,7 +6,6 @@ describe('Assignment engine', () => {
   const experiment = {
     key: 'landing_page_tagline',
     status: 'active',
-    salt: 'v1',
     variants: [
       { key: 'control', allocation: 50 },
       { key: 'treatment', allocation: 50 }
@@ -14,15 +13,15 @@ describe('Assignment engine', () => {
   };
 
   it('builds hash input with explicit separators', () => {
-    expect(buildHashInput('ab', 'c', 'v1')).toBe('ab:c:v1');
-    expect(buildHashInput('a', 'bc', 'v1')).toBe('a:bc:v1');
+    expect(buildHashInput('ab', 'c')).toBe('ab:c');
+    expect(buildHashInput('a', 'bc')).toBe('a:bc');
   });
 
   it('returns a stable bucket in the expected range', () => {
-    const bucket = getBucket(buildHashInput('exp', 'visitor_123', 'v1'));
+    const bucket = getBucket(buildHashInput('exp', 'visitor_123'));
     expect(bucket).toBeGreaterThanOrEqual(0);
     expect(bucket).toBeLessThan(10000);
-    expect(bucket).toBe(getBucket(buildHashInput('exp', 'visitor_123', 'v1')));
+    expect(bucket).toBe(getBucket(buildHashInput('exp', 'visitor_123')));
   });
 
   it('assigns the same visitor stickily', () => {
