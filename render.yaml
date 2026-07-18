@@ -16,6 +16,12 @@ services:
         sync: false # User will paste their Upstash Redis connection string here
       - key: API_KEY
         generateValue: true # Generates a secure API key automatically
+      - key: DB_SSL_ENABLED
+        value: "true"
+      - key: DB_SSL_REJECT_UNAUTHORIZED
+        value: "true"
+      - key: DB_CA_CERT
+        sync: false # User will paste the raw content of their Aiven ca.pem certificate here
 
   # 2. React Admin Dashboard (Static Site)
   - type: web
