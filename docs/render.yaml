@@ -1,0 +1,38 @@
+services:
+  # 1. Hecate Express Backend
+  - type: web
+    name: hecate-backend
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: npm install && npm --prefix js-sdk install && npm --prefix js-sdk run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: prod
+      - key: DATABASE_URL
+        sync: false # User will paste their Aiven PostgreSQL connection string here
+      - key: REDIS_URL
+        sync: false # User will paste their Upstash Redis connection string here
+      - key: DB_SSL_ENABLED
+        value: "true"
+      - key: DB_SSL_REJECT_UNAUTHORIZED
+        value: "true"
+      - key: DB_CA_CERT
+        sync: false # User will paste the raw content of their Aiven ca.pem certificate here
+
+  # 2. React Admin Dashboard (Static Site)
+  - type: web
+    name: hecate-admin
+    runtime: static
+    rootDir: admin-dashboard
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      # Direct all routes to index.html for React Router routing
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_HECATE_API_URL
+        sync: false # Paste the public URL of your backend service here (e.g. https://hecate-backend.onrender.com)

@@ -55,5 +55,4 @@ Thumbs.db
 .vscode/
 
 # Local project docs and agent handoff notes
-docs/
 .agents/
