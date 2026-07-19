@@ -2,14 +2,20 @@
 
 Hecate is a lightweight experimentation and A/B testing backend service. It supports experiment CRUD operations, deterministic traffic-based variant assignments, exposure tracking, telemetry event/conversion tracking, and results aggregation.
 
-The architecture, determinism, scale, failure handling, and measurement-correctness decisions are documented in [DESIGN.md](./DESIGN.md).
+The architecture, determinism, scale, failure handling, and measurement-correctness decisions are documented in [hecate_design_doc.md](./docs/hecate_design_doc.md).
 
 ## Tech Stack
-- **Runtime**: Node.js v22.x (LTS)
+- **Runtime**: Node.js v24.x (LTS) (v22.x+ compatible)
 - **Framework**: Express.js
 - **Database**: PostgreSQL (via `pg-promise`)
 - **Cache**: Redis
 - **Test Framework**: Jest & Supertest
+
+## Repository Structure
+- `.` — Express.js backend API and database migrations.
+- `admin-dashboard/` — React SPA Admin Dashboard (Vite + React Router).
+- `js-sdk/` — Framework-agnostic Browser JavaScript SDK.
+- `docs/` — Technical design documents, API contracts, and architecture specifications.
 
 ---
 
@@ -91,6 +97,11 @@ Local database user:
 Run migrations explicitly after creating the database and before starting the app. Migrations create database tables only; they do not seed users, API keys, experiments, or other data.
 ```bash
 npm run db:migrate
+```
+
+*Note:* If `npm run db:migrate` fails (e.g. due to connection or permissions issues), run the SQL statements from [`lib/sql/schema.sql`](./lib/sql/schema.sql) directly against your PostgreSQL database using `psql` or your database GUI:
+```bash
+psql -d hecate_development -f lib/sql/schema.sql
 ```
 
 ### 5. Start the Application
@@ -373,3 +384,20 @@ not automatically retry this attribution error.
 curl http://localhost:4000/api/v1/results/checkout_button_text \
   -H "Authorization: Bearer <token>"
 ```
+
+---
+
+## Deployment
+
+Hecate is configured for deployment on [Render](https://render.com) using [`render.yaml`](./render.yaml).
+
+- **Backend Service**: `https://hecate-backend.onrender.com`
+- **Admin Dashboard**: `https://hecate-admin.onrender.com/`
+
+When deploying, configure the following environment variables on Render:
+- `DATABASE_URL`: Managed PostgreSQL connection string (e.g. Aiven / Supabase)
+- `REDIS_URL`: Managed Redis connection string (e.g. Upstash)
+- `JWT_SECRET` & `API_KEY_HASH_SECRET`: Strong secret strings
+- `DB_SSL_ENABLED`: `true`
+- `DB_SSL_REJECT_UNAUTHORIZED`: `true`
+- `DB_CA_CERT`: CA certificate content for SSL connection
