@@ -4,11 +4,15 @@ const request = require('supertest');
 const app = require('../../app');
 const { db } = require('../../lib/data-accessors/db');
 const { disconnectRedis } = require('../../lib/cache/redis');
+const { ensureTestServiceKey } = require('./test-auth-helper');
+const { assertSafeTestDatabase } = require('./test-db-helper');
 
 describe('Service Foundation (Phase 0)', () => {
   beforeAll(async () => {
+    await assertSafeTestDatabase();
     const migrate = require('../../lib/helpers/migrate');
     await migrate();
+    await ensureTestServiceKey();
   });
 
   afterAll(async () => {

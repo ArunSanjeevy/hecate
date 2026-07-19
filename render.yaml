@@ -5,15 +5,30 @@ services:
     runtime: node
     plan: free
     rootDir: .
-    buildCommand: npm install && npm --prefix js-sdk install && npm --prefix js-sdk run build
+    buildCommand: npm ci && npm --prefix js-sdk ci && npm --prefix js-sdk run build
     startCommand: npm start
+    healthCheckPath: /health/ready
     envVars:
       - key: NODE_ENV
         value: prod
+      - key: NODE_VERSION
+        value: "24"
       - key: DATABASE_URL
         sync: false # User will paste their Aiven PostgreSQL connection string here
       - key: REDIS_URL
         sync: false # User will paste their Upstash Redis connection string here
+      - key: JWT_SECRET
+        generateValue: true
+      - key: API_KEY_HASH_SECRET
+        generateValue: true
+      - key: JWT_ISSUER
+        value: hecate-api
+      - key: JWT_AUDIENCE
+        value: hecate-dashboard
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: CORS_ORIGINS
+        sync: false # Paste the public admin dashboard URL here after creating the static site
       - key: DB_SSL_ENABLED
         value: "true"
       - key: DB_SSL_REJECT_UNAUTHORIZED
@@ -26,7 +41,7 @@ services:
     name: hecate-admin
     runtime: static
     rootDir: admin-dashboard
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: dist
     routes:
       # Direct all routes to index.html for React Router routing
@@ -34,5 +49,7 @@ services:
         source: /*
         destination: /index.html
     envVars:
+      - key: NODE_VERSION
+        value: "24"
       - key: VITE_HECATE_API_URL
         sync: false # Paste the public URL of your backend service here (e.g. https://hecate-backend.onrender.com)

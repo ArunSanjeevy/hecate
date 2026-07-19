@@ -4,14 +4,19 @@ import { Link } from 'react-router-dom';
 import { Search, PlusCircle, Eye, BarChart2 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { LoadingState, ErrorState, EmptyState } from '../components/States';
+import PaginationControls from '../components/PaginationControls';
+import { VALIDATION_LIMITS } from '../constants/validation';
 
 export default function ExperimentList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [offset, setOffset] = useState(0);
+  const limit = VALIDATION_LIMITS.paginationDefaultLimit;
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['experiments'],
-    queryFn: apiClient.getExperiments,
+    queryKey: ['experiments', { limit, offset }],
+    queryFn: () => apiClient.getExperiments({ limit, offset }),
+    placeholderData: previousData => previousData
   });
 
   if (isLoading) return <LoadingState message="Loading experiments list..." />;
@@ -26,6 +31,7 @@ export default function ExperimentList() {
   }
 
   const experiments = data?.experiments || [];
+  const pagination = data?.pagination;
 
   if (experiments.length === 0) {
     return (
@@ -176,6 +182,11 @@ export default function ExperimentList() {
               })}
             </tbody>
           </table>
+          <PaginationControls
+            pagination={pagination}
+            onPageChange={setOffset}
+            isFetching={isLoading}
+          />
         </div>
       )}
     </div>

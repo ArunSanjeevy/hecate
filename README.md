@@ -2,6 +2,8 @@
 
 Hecate is a lightweight experimentation and A/B testing backend service. It supports experiment CRUD operations, deterministic traffic-based variant assignments, exposure tracking, telemetry event/conversion tracking, and results aggregation.
 
+The architecture, determinism, scale, failure handling, and measurement-correctness decisions are documented in [DESIGN.md](./DESIGN.md).
+
 ## Tech Stack
 - **Runtime**: Node.js v22.x (LTS)
 - **Framework**: Express.js
@@ -22,9 +24,25 @@ Default parameters in `.env`:
 ```ini
 PORT=4000
 NODE_ENV=dev
-# Local-development service key. Never expose this value in a browser bundle.
-API_KEY=dev-api-key
+JWT_SECRET=replace-with-at-least-32-random-characters
+JWT_ISSUER=hecate-api
+JWT_AUDIENCE=hecate-dashboard
+JWT_EXPIRES_IN=24h
+API_KEY_HASH_SECRET=replace-with-at-least-32-random-characters
+CORS_ORIGINS=http://localhost:5173
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_AUTH_WINDOW_MS=900000
+RATE_LIMIT_AUTH_MAX=50
+RATE_LIMIT_SDK_WINDOW_MS=60000
+RATE_LIMIT_SDK_MAX=600
+RATE_LIMIT_CONTROL_WINDOW_MS=60000
+RATE_LIMIT_CONTROL_MAX=300
+API_KEY_AUTH_CACHE_ENABLED=true
+API_KEY_AUTH_CACHE_TTL_SECONDS=300
+EXPERIMENT_CACHE_TTL_SECONDS=60
+GRACEFUL_SHUTDOWN_TIMEOUT_MS=10000
 DATABASE_URL=postgres://admin:hecate@localhost:5432/hecate_development
+TEST_DATABASE_URL=postgres://admin:hecate@localhost:5432/hecate_test
 POSTGRES_ADMIN_URL=postgres://postgres:postgres@localhost:5432/postgres
 DB_APP_USER=admin
 DB_APP_PASSWORD=hecate
@@ -35,7 +53,11 @@ DB_SSL_REJECT_UNAUTHORIZED=true
 REDIS_URL=redis://localhost:6379
 ```
 
-For production PostgreSQL providers like Aiven, set `NODE_ENV=prod`, provide `DATABASE_URL`, set `DB_SSL_ENABLED=true`, and provide either `DB_CA_CERT` or `DB_CA_CERT_PATH`. Prefer `sslmode=verify-full` in the database URL.
+For production PostgreSQL providers like Aiven, set `NODE_ENV=prod`, provide
+`DATABASE_URL`, `REDIS_URL`, strong `JWT_SECRET` and `API_KEY_HASH_SECRET`
+values, set `DB_SSL_ENABLED=true`, set `DB_SSL_REJECT_UNAUTHORIZED=true`,
+provide either `DB_CA_CERT` or `DB_CA_CERT_PATH`, and set `CORS_ORIGINS` to the
+explicit dashboard origin(s). Prefer `sslmode=verify-full` in the database URL.
 
 ### 2. Install Dependencies
 ```bash
@@ -53,6 +75,7 @@ CREATE DATABASE hecate;
 Or run:
 ```bash
 npm run db:init
+npm run db:init:test
 ```
 
 Default database names:
@@ -65,9 +88,9 @@ Local database user:
 - Password: `hecate`
 
 ### 4. Run Schema Migrations
-Migrations run automatically on application startup. You can also run the server directly which triggers migrations:
+Run migrations explicitly after creating the database and before starting the app. Migrations create database tables only; they do not seed users, API keys, experiments, or other data.
 ```bash
-npm start
+npm run db:migrate
 ```
 
 ### 5. Start the Application
@@ -81,6 +104,11 @@ npm start
 ## Running Tests
 
 Tests are executed using Jest. Ensure PostgreSQL and Redis are running locally or inside Docker before running tests.
+
+Integration tests require `TEST_DATABASE_URL` and refuse to run destructive
+cleanup unless the configured database name is clearly test-only, such as
+`hecate_test` or `test_hecate`. Do not point `TEST_DATABASE_URL` at a
+development, staging, or production database.
 
 - Run all tests:
   ```bash
@@ -105,7 +133,7 @@ The API has two trust boundaries:
 
 - **SDK keys** are intentionally publishable and may call only assignments and event-ingestion routes. Create them through the authenticated keys API; they are returned in plain text only at creation time.
 - **User JWTs** (returned by `POST /api/v1/auth/login`) authorize the dashboard/control plane: experiments, results, and API-key management.
-- **Service keys** are server-to-server credentials and may access both areas. Do not place one in browser code. The seeded `dev-api-key` is a local-development service key retained for compatibility.
+- **Service keys** are server-to-server credentials and may access both areas. Do not place one in browser code.
 
 Register and sign in before calling control-plane APIs:
 
@@ -128,13 +156,24 @@ copy the returned value immediately:
 curl -X POST http://localhost:4000/api/v1/keys \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
-  -d '{"name":"Website production"}'
+  -d '{"name":"Website production","expiresAt":"2026-12-31T23:59:59.000Z"}'
 ```
 
-### 1. Health Check (Public)
-`GET /health`
+API keys are returned in full only when created. The database stores a short
+lookup prefix and a keyed hash, not the plaintext key.
+
+### 1. Health Checks (Public)
+`GET /health` and `GET /health/live` are liveness checks.
 ```bash
 curl http://localhost:4000/health
+```
+
+`GET /health/ready` is a readiness check. PostgreSQL is required; Redis is
+reported as degraded if unavailable because Redis is a cache optimization, not
+the source of truth.
+
+```bash
+curl http://localhost:4000/health/ready
 ```
 
 ### 2. Create Experiment
@@ -191,10 +230,24 @@ variant-only experiments remain supported. Content cannot be configured for
 only a subset of variants.
 
 ### 4. List Experiments
-`GET /api/v1/experiments`
+`GET /api/v1/experiments?limit=20&offset=0`
 ```bash
-curl http://localhost:4000/api/v1/experiments \
+curl "http://localhost:4000/api/v1/experiments?limit=20&offset=0" \
   -H "Authorization: Bearer <token>"
+```
+
+List endpoints support basic pagination with `limit` and `offset`. The default
+limit is `20`, the maximum limit is `100`, and responses include:
+
+```json
+{
+  "pagination": {
+    "limit": 20,
+    "offset": 0,
+    "total": 42,
+    "hasMore": true
+  }
+}
 ```
 
 ### 5. Update Experiment
@@ -237,12 +290,15 @@ curl -X DELETE http://localhost:4000/api/v1/experiments/checkout_button_text \
   -H "Authorization: Bearer <token>"
 ```
 
+Deleting an experiment archives it instead of removing the row. Archived
+experiment keys remain reserved forever and cannot be reactivated.
+
 ### 9. Get Assignment (Deterministic & Sticky)
 `POST /api/v1/assignments`
 ```bash
 curl -X POST http://localhost:4000/api/v1/assignments \
   -H "Content-Type: application/json" \
-  -H "x-api-key: dev-api-key" \
+  -H "x-api-key: <sdk-api-key>" \
   -d '{
     "visitorId": "visitor_123",
     "experimentKeys": ["checkout_button_text"]
@@ -274,7 +330,7 @@ The `content` property is omitted for variants without configured content.
 ```bash
 curl -X POST http://localhost:4000/api/v1/events/exposure \
   -H "Content-Type: application/json" \
-  -H "x-api-key: dev-api-key" \
+  -H "x-api-key: <sdk-api-key>" \
   -d '{
     "visitorId": "visitor_123",
     "experimentKey": "checkout_button_text",
@@ -294,7 +350,7 @@ rejected with `409 assignment_mismatch` and is never counted.
 ```bash
 curl -X POST http://localhost:4000/api/v1/events/telemetry \
   -H "Content-Type: application/json" \
-  -H "x-api-key: dev-api-key" \
+  -H "x-api-key: <sdk-api-key>" \
   -d '{
     "visitorId": "visitor_123",
     "experimentKey": "checkout_button_text",

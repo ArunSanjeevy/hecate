@@ -4,15 +4,17 @@ const request = require('supertest');
 const app = require('../../app');
 const { db } = require('../../lib/data-accessors/db');
 const { disconnectRedis } = require('../../lib/cache/redis');
+const { assertSafeTestDatabase, truncateTables } = require('./test-db-helper');
 
 describe('Authentication and API key management', () => {
   beforeAll(async () => {
+    await assertSafeTestDatabase();
     const migrate = require('../../lib/helpers/migrate');
     await migrate();
   });
 
   beforeEach(async () => {
-    await db.none('TRUNCATE TABLE users CASCADE');
+    await truncateTables(['users']);
   });
 
   afterAll(async () => {
@@ -59,6 +61,9 @@ describe('Authentication and API key management', () => {
       .expect(201);
 
     expect(created.body.key.apiKey).toMatch(/^hk_[a-f0-9]{48}$/);
+    const stored = await db.one('SELECT api_key_prefix, api_key_hash FROM user_api_keys WHERE id = $1', [created.body.key.id]);
+    expect(stored.api_key_prefix).toBe(created.body.key.apiKey.slice(0, 15));
+    expect(stored.api_key_hash).not.toBe(created.body.key.apiKey);
     const listed = await request(app)
       .get('/api/v1/keys')
       .set('Authorization', authorization)

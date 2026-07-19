@@ -5,16 +5,22 @@ const app = require('../../app');
 const { db } = require('../../lib/data-accessors/db');
 const { disconnectRedis, flushAll } = require('../../lib/cache/redis');
 const redisCache = require('../../lib/cache/redis');
+const { ensureTestServiceKey } = require('./test-auth-helper');
+const { assertSafeTestDatabase, truncateTables } = require('./test-db-helper');
+const { getExperimentCacheKey } = require('../../lib/helpers/experiment-cache-key');
+const { assignVariant } = require('../../lib/helpers/assignment-engine');
 
 describe('Experiment CRUD (Phase 1)', () => {
   beforeAll(async () => {
+    await assertSafeTestDatabase();
     const migrate = require('../../lib/helpers/migrate');
     await migrate();
+    await ensureTestServiceKey();
   });
 
   beforeEach(async () => {
     // Clean database before each test
-    await db.none('TRUNCATE TABLE experiments CASCADE');
+    await truncateTables(['experiments']);
     // Clear Redis cache
     await flushAll();
   });
@@ -220,7 +226,8 @@ describe('Experiment CRUD (Phase 1)', () => {
         .send(initial)
         .expect(201);
 
-      const cacheKey = `experiment:${initial.key}`;
+      const owner = await db.one('SELECT user_id FROM experiments WHERE key = $1', [initial.key]);
+      const cacheKey = getExperimentCacheKey(owner.user_id, initial.key);
       const deleteCacheSpy = jest.spyOn(redisCache, 'del');
       const cachedBefore = await redisCache.get(cacheKey);
       const dbBefore = await db.one('SELECT status, variants FROM experiments WHERE key = $1', [initial.key]);
@@ -342,6 +349,23 @@ describe('Experiment CRUD (Phase 1)', () => {
         .set('x-api-key', 'dev-api-key')
         .expect(404);
     });
+
+    it('should reject activating an archived experiment', async () => {
+      await request(app)
+        .post('/api/v1/experiments')
+        .set('x-api-key', 'dev-api-key')
+        .send({ ...validExperiment, key: 'archived_activate_test', status: 'archived' })
+        .expect(201);
+
+      const res = await request(app)
+        .post('/api/v1/experiments/archived_activate_test/activate')
+        .set('x-api-key', 'dev-api-key')
+        .expect(409);
+
+      expect(res.body.error_code).toBe('invalid_experiment_status_transition');
+      const row = await db.one('SELECT status FROM experiments WHERE key = $1', ['archived_activate_test']);
+      expect(row.status).toBe('archived');
+    });
   });
 
   describe('POST /api/v1/experiments/:key/deactivate', () => {
@@ -364,10 +388,27 @@ describe('Experiment CRUD (Phase 1)', () => {
       const row = await db.one('SELECT status FROM experiments WHERE key = $1', ['checkout_button_text']);
       expect(row.status).toBe('paused');
     });
+
+    it('should reject deactivating an archived experiment', async () => {
+      await request(app)
+        .post('/api/v1/experiments')
+        .set('x-api-key', 'dev-api-key')
+        .send({ ...validExperiment, key: 'archived_deactivate_test', status: 'archived' })
+        .expect(201);
+
+      const res = await request(app)
+        .post('/api/v1/experiments/archived_deactivate_test/deactivate')
+        .set('x-api-key', 'dev-api-key')
+        .expect(409);
+
+      expect(res.body.error_code).toBe('invalid_experiment_status_transition');
+      const row = await db.one('SELECT status FROM experiments WHERE key = $1', ['archived_deactivate_test']);
+      expect(row.status).toBe('archived');
+    });
   });
 
   describe('DELETE /api/v1/experiments/:key', () => {
-    it('should delete an experiment successfully', async () => {
+    it('should archive an experiment without freeing its key', async () => {
       await request(app)
         .post('/api/v1/experiments')
         .set('x-api-key', 'dev-api-key')
@@ -380,11 +421,17 @@ describe('Experiment CRUD (Phase 1)', () => {
         .expect(200);
 
       expect(res.body.status).toBe('success');
-      expect(res.body.message).toBe('Experiment deleted successfully');
+      expect(res.body.message).toBe('Experiment archived successfully');
+      expect(res.body.experiment.status).toBe('archived');
 
-      // Verify db is empty
-      const row = await db.oneOrNone('SELECT * FROM experiments WHERE key = $1', ['checkout_button_text']);
-      expect(row).toBeNull();
+      const row = await db.one('SELECT status FROM experiments WHERE key = $1', ['checkout_button_text']);
+      expect(row.status).toBe('archived');
+
+      await request(app)
+        .post('/api/v1/experiments')
+        .set('x-api-key', 'dev-api-key')
+        .send(validExperiment)
+        .expect(409);
     });
 
     it('should return 404 when deleting unknown experiment', async () => {
@@ -392,6 +439,21 @@ describe('Experiment CRUD (Phase 1)', () => {
         .delete('/api/v1/experiments/unknown_key')
         .set('x-api-key', 'dev-api-key')
         .expect(404);
+    });
+
+    it('should reject archiving an already archived experiment', async () => {
+      await request(app)
+        .post('/api/v1/experiments')
+        .set('x-api-key', 'dev-api-key')
+        .send({ ...validExperiment, key: 'already_archived_test', status: 'archived' })
+        .expect(201);
+
+      const res = await request(app)
+        .delete('/api/v1/experiments/already_archived_test')
+        .set('x-api-key', 'dev-api-key')
+        .expect(409);
+
+      expect(res.body.error_code).toBe('invalid_experiment_status_transition');
     });
   });
 
@@ -438,6 +500,35 @@ describe('Experiment CRUD (Phase 1)', () => {
         visitorId: 'visitor-isolation', experimentKey: 'checkout_button_text', variantKey: 'control'
       }).expect(404);
       await request(app).get('/api/v1/results/checkout_button_text').set('Authorization', other.authorization).expect(404);
+    });
+
+    it('allows different tenants to reuse the same experiment key without mixing data', async () => {
+      const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const owner = await createUser(`owner-shared-key-${suffix}@example.com`);
+      const other = await createUser(`other-shared-key-${suffix}@example.com`);
+
+      await request(app).post('/api/v1/experiments').set('Authorization', owner.authorization).send(validExperiment).expect(201);
+      await request(app).post('/api/v1/experiments').set('Authorization', other.authorization).send(validExperiment).expect(201);
+
+      await request(app).post('/api/v1/events/exposure').set('x-api-key', owner.apiKey).send({
+        visitorId: 'owner-visitor',
+        experimentKey: 'checkout_button_text',
+        variantKey: assignVariant('owner-visitor', validExperiment)
+      }).expect(200);
+      await request(app).post('/api/v1/events/exposure').set('x-api-key', other.apiKey).send({
+        visitorId: 'other-visitor',
+        experimentKey: 'checkout_button_text',
+        variantKey: assignVariant('other-visitor', validExperiment)
+      }).expect(200);
+
+      const eventOwners = await db.any(`
+        SELECT user_id, count(*)::int AS count
+        FROM exposure_events
+        WHERE experiment_key = $1
+        GROUP BY user_id
+      `, ['checkout_button_text']);
+      expect(eventOwners).toHaveLength(2);
+      expect(eventOwners.every(row => row.count === 1)).toBe(true);
     });
   });
 });

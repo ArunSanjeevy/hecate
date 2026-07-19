@@ -3,12 +3,25 @@
 require('dotenv').config();
 const pgp = require('pg-promise')();
 
+const getTestDatabaseName = () => {
+  if (!process.env.TEST_DATABASE_URL) {
+    throw new Error('TEST_DATABASE_URL is required to initialize the test database');
+  }
+
+  const parsedUrl = new URL(process.env.TEST_DATABASE_URL);
+  const databaseName = parsedUrl.pathname.replace(/^\//, '');
+  if (!databaseName || !/(^test_|_test$|_test_|-test$|-test-)/i.test(databaseName)) {
+    throw new Error(`Refusing to initialize non-test database '${databaseName}'`);
+  }
+  return databaseName;
+};
+
 const initTestDb = async () => {
   // Connect to the admin database first to check/create the test db.
   const defaultCn = process.env.POSTGRES_ADMIN_URL || 'postgres://postgres:postgres@localhost:5432/postgres';
   const db = pgp(defaultCn);
   
-  const testDbName = 'hecate_test';
+  const testDbName = getTestDatabaseName();
   const appRoleName = process.env.DB_APP_USER || 'admin';
   const appRolePassword = process.env.DB_APP_PASSWORD || 'hecate';
   

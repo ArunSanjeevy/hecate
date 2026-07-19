@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node app.js",
     "db:init": "node scripts/init-dbs.js",
+    "db:init:test": "node scripts/init-test-db.js",
+    "db:migrate": "node scripts/migrate.js",
     "cache:clear-experiment": "node scripts/clear-experiment-cache.js",
     "test": "jest --runInBand",
     "test:unit": "jest tests/unit --runInBand",
@@ -20,6 +22,7 @@
     "express": "^4.19.2",
     "helmet": "^7.1.0",
     "joi": "^17.13.1",
+    "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
     "pg-promise": "^11.8.0",
     "redis": "^4.6.14",

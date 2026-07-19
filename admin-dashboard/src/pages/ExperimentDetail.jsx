@@ -5,6 +5,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { ArrowLeft, Save, Trash2, Plus, AlertCircle, BarChart2, CheckCircle2, Play, Pause, Edit2 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { LoadingState, ErrorState } from '../components/States';
+import { VALIDATION_LIMITS, experimentKeyPattern, experimentKeyHelpText } from '../constants/validation';
 
 const toFormValues = (experiment) => ({
   key: experiment.key,
@@ -90,12 +91,12 @@ export default function ExperimentDetail() {
       navigate('/experiments');
     },
     onError: (err) => {
-      setActionError(err.message || 'Failed to delete experiment.');
+      setActionError(err.message || 'Failed to archive experiment.');
     }
   });
 
   const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to delete the experiment "${key}"? This action cannot be undone.`)) {
+    if (window.confirm(`Archive experiment "${key}"? Archived keys remain reserved and cannot be reactivated.`)) {
       deleteMutation.mutate();
     }
   };
@@ -135,11 +136,13 @@ export default function ExperimentDetail() {
   });
 
   const hasEmptyKeys = watchedVariants.some(v => !v.key || v.key.trim() === '');
+  const hasTooManyVariants = watchedVariants.length > VALIDATION_LIMITS.variantMaxCount;
+  const hasInvalidKeys = watchedVariants.some(v => v.key && !experimentKeyPattern.test(v.key.trim()));
   const hasEmptyContent = hasContent && watchedVariants.some(v => !v.content?.text || v.content.text.trim() === '');
 
   const isAllocationValid = totalAllocation === 100;
   const isVariantsCountValid = watchedVariants.length >= 2;
-  const isFormValidLocally = isAllocationValid && isVariantsCountValid && !hasDuplicateKeys && !hasInvalidAllocations && !hasEmptyKeys && !hasEmptyContent;
+  const isFormValidLocally = isAllocationValid && isVariantsCountValid && !hasTooManyVariants && !hasDuplicateKeys && !hasInvalidAllocations && !hasEmptyKeys && !hasInvalidKeys && !hasEmptyContent;
 
   // Determine if allocations have changed compared to original loaded experiment
   const checkAllocationsChanged = () => {
@@ -275,7 +278,18 @@ export default function ExperimentDetail() {
                       flexDirection: 'column',
                       gap: '2px'
                     }}>
-                      {experiment?.status === 'active' ? (
+                      {experiment?.status === 'archived' ? (
+                        <div
+                          style={{
+                            padding: '8px 12px',
+                            color: 'var(--text-muted)',
+                            fontSize: '0.875rem'
+                          }}
+                          data-testid="archived-terminal-note"
+                        >
+                          Archived experiments are terminal.
+                        </div>
+                      ) : experiment?.status === 'active' ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -332,33 +346,35 @@ export default function ExperimentDetail() {
                           <span>Activate</span>
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleDelete();
-                          setDropdownOpen(false);
-                        }}
-                        disabled={deleteMutation.isPending}
-                        className="dropdown-item danger"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem',
-                          padding: '8px 12px',
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--danger-color)',
-                          textAlign: 'left',
-                          width: '100%',
-                          cursor: 'pointer',
-                          borderRadius: '4px',
-                          fontSize: '0.875rem'
-                        }}
-                        data-testid="delete-btn"
-                      >
-                        <Trash2 size={14} />
-                        <span>Delete</span>
-                      </button>
+                      {experiment?.status !== 'archived' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleDelete();
+                            setDropdownOpen(false);
+                          }}
+                          disabled={deleteMutation.isPending}
+                          className="dropdown-item danger"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            padding: '8px 12px',
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--danger-color)',
+                            textAlign: 'left',
+                            width: '100%',
+                            cursor: 'pointer',
+                            borderRadius: '4px',
+                            fontSize: '0.875rem'
+                          }}
+                          data-testid="delete-btn"
+                        >
+                          <Trash2 size={14} />
+                          <span>Archive</span>
+                        </button>
+                      )}
                     </div>
                   </>
                 )}
@@ -374,7 +390,7 @@ export default function ExperimentDetail() {
       {!isDraft && (
         <div className="alert alert-warning" data-testid="immutable-config-guidance" style={{ marginBottom: '1.5rem' }}>
           <AlertCircle size={20} />
-          <div className="alert-message">Variants and allocation are locked for this experiment. Create a new experiment key/version to change the configuration.</div>
+          <div className="alert-message">Variants and allocation are locked for this experiment. Create a new experiment key/version to change the configuration. Archived experiments are terminal and cannot be reactivated.</div>
         </div>
       )}
 
@@ -461,6 +477,7 @@ export default function ExperimentDetail() {
               className="btn btn-secondary btn-sm"
               style={{ padding: '0.375rem 0.75rem', display: isEditing ? 'inline-flex' : 'none' }}
               onClick={() => append({ key: '', allocation: 0, content: hasContent ? { type: 'static_text', text: '' } : undefined })}
+              disabled={fields.length >= VALIDATION_LIMITS.variantMaxCount}
               data-testid="add-variant-btn"
             >
               <Plus size={16} />
@@ -474,9 +491,21 @@ export default function ExperimentDetail() {
             </p>
           )}
 
+          {hasTooManyVariants && (
+            <p className="form-error" style={{ marginBottom: '1rem' }} data-testid="error-variants-max">
+              An experiment can have at most {VALIDATION_LIMITS.variantMaxCount} variants.
+            </p>
+          )}
+
           {hasDuplicateKeys && (
             <p className="form-error" style={{ marginBottom: '1rem' }} data-testid="error-duplicate-keys">
               Variant keys must be unique.
+            </p>
+          )}
+
+          {hasInvalidKeys && (
+            <p className="form-error" style={{ marginBottom: '1rem' }} data-testid="error-invalid-keys">
+              Variant keys must follow this format: {experimentKeyHelpText}
             </p>
           )}
 
@@ -502,7 +531,18 @@ export default function ExperimentDetail() {
                   placeholder="e.g. treatment_red"
                   className="form-input"
                   disabled={!isEditing}
-                  {...register(`variants.${index}.key`, { required: 'Variant key is required' })}
+                  maxLength={VALIDATION_LIMITS.variantKeyMaxLength}
+                  {...register(`variants.${index}.key`, {
+                    required: 'Variant key is required',
+                    maxLength: {
+                      value: VALIDATION_LIMITS.variantKeyMaxLength,
+                      message: `Variant key cannot exceed ${VALIDATION_LIMITS.variantKeyMaxLength} characters`
+                    },
+                    pattern: {
+                      value: experimentKeyPattern,
+                      message: experimentKeyHelpText
+                    }
+                  })}
                   data-testid={`variant-key-input-${index}`}
                 />
               </div>
@@ -515,7 +555,13 @@ export default function ExperimentDetail() {
                     className="form-input"
                     rows={3}
                     disabled={!isEditing}
-                    {...register(`variants.${index}.content.text`)}
+                    maxLength={VALIDATION_LIMITS.contentTextMaxLength}
+                    {...register(`variants.${index}.content.text`, {
+                      maxLength: {
+                        value: VALIDATION_LIMITS.contentTextMaxLength,
+                        message: `Content cannot exceed ${VALIDATION_LIMITS.contentTextMaxLength} characters`
+                      }
+                    })}
                     data-testid={`variant-content-input-${index}`}
                   />
                 </div>

@@ -3,6 +3,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Trash2, Save, ArrowLeft, AlertCircle } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { VALIDATION_LIMITS, experimentKeyPattern, experimentKeyHelpText } from '../constants/validation';
 
 export default function ExperimentCreate() {
   const navigate = useNavigate();
@@ -53,12 +54,14 @@ export default function ExperimentCreate() {
 
   // Check if any variant key is empty
   const hasEmptyKeys = watchedVariants.some(v => !v.key || v.key.trim() === '');
+  const hasTooManyVariants = watchedVariants.length > VALIDATION_LIMITS.variantMaxCount;
+  const hasInvalidKeys = watchedVariants.some(v => v.key && !experimentKeyPattern.test(v.key.trim()));
   const hasEmptyContent = hasContent && watchedVariants.some(v => !v.content?.text || v.content.text.trim() === '');
 
   // Form isValid determination
   const isAllocationValid = totalAllocation === 100;
   const isVariantsCountValid = watchedVariants.length >= 2;
-  const isFormValidLocally = isAllocationValid && isVariantsCountValid && !hasDuplicateKeys && !hasInvalidAllocations && !hasEmptyKeys && !hasEmptyContent;
+  const isFormValidLocally = isAllocationValid && isVariantsCountValid && !hasTooManyVariants && !hasDuplicateKeys && !hasInvalidAllocations && !hasEmptyKeys && !hasInvalidKeys && !hasEmptyContent;
 
   const onSubmit = async (data) => {
     if (!isFormValidLocally) return;
@@ -125,13 +128,19 @@ export default function ExperimentCreate() {
             placeholder="e.g. checkout_button_color"
             {...register('key', { 
               required: 'Experiment key is required',
+              maxLength: {
+                value: VALIDATION_LIMITS.experimentKeyMaxLength,
+                message: `Experiment key cannot exceed ${VALIDATION_LIMITS.experimentKeyMaxLength} characters`
+              },
               pattern: {
-                value: /^[a-zA-Z0-9_]+$/,
-                message: 'Experiment key must be alphanumeric or underscores'
+                value: experimentKeyPattern,
+                message: experimentKeyHelpText
               }
             })}
+            maxLength={VALIDATION_LIMITS.experimentKeyMaxLength}
             data-testid="field-key"
           />
+          <p className="form-help">{experimentKeyHelpText}</p>
           {errors.key && (
             <p className="form-error" data-testid="error-key">{errors.key.message}</p>
           )}
@@ -180,6 +189,7 @@ export default function ExperimentCreate() {
               className="btn btn-secondary btn-sm"
               style={{ padding: '0.375rem 0.75rem' }}
               onClick={() => append({ key: '', allocation: 0, content: hasContent ? { type: 'static_text', text: '' } : undefined })}
+              disabled={fields.length >= VALIDATION_LIMITS.variantMaxCount}
               data-testid="add-variant-btn"
             >
               <Plus size={16} />
@@ -193,9 +203,21 @@ export default function ExperimentCreate() {
             </p>
           )}
 
+          {hasTooManyVariants && (
+            <p className="form-error" style={{ marginBottom: '1rem' }} data-testid="error-variants-max">
+              An experiment can have at most {VALIDATION_LIMITS.variantMaxCount} variants.
+            </p>
+          )}
+
           {hasDuplicateKeys && (
             <p className="form-error" style={{ marginBottom: '1rem' }} data-testid="error-duplicate-keys">
               Variant keys must be unique.
+            </p>
+          )}
+
+          {hasInvalidKeys && (
+            <p className="form-error" style={{ marginBottom: '1rem' }} data-testid="error-invalid-keys">
+              Variant keys must follow the same key format as experiment keys.
             </p>
           )}
 
@@ -220,7 +242,18 @@ export default function ExperimentCreate() {
                   type="text"
                   placeholder="e.g. treatment_red"
                   className="form-input"
-                  {...register(`variants.${index}.key`, { required: 'Variant key is required' })}
+                  maxLength={VALIDATION_LIMITS.variantKeyMaxLength}
+                  {...register(`variants.${index}.key`, {
+                    required: 'Variant key is required',
+                    maxLength: {
+                      value: VALIDATION_LIMITS.variantKeyMaxLength,
+                      message: `Variant key cannot exceed ${VALIDATION_LIMITS.variantKeyMaxLength} characters`
+                    },
+                    pattern: {
+                      value: experimentKeyPattern,
+                      message: experimentKeyHelpText
+                    }
+                  })}
                   data-testid={`variant-key-input-${index}`}
                 />
               </div>
@@ -232,7 +265,13 @@ export default function ExperimentCreate() {
                     placeholder="Text returned when this variant is assigned"
                     className="form-input"
                     rows={3}
-                    {...register(`variants.${index}.content.text`)}
+                    maxLength={VALIDATION_LIMITS.contentTextMaxLength}
+                    {...register(`variants.${index}.content.text`, {
+                      maxLength: {
+                        value: VALIDATION_LIMITS.contentTextMaxLength,
+                        message: `Content cannot exceed ${VALIDATION_LIMITS.contentTextMaxLength} characters`
+                      }
+                    })}
                     data-testid={`variant-content-input-${index}`}
                   />
                 </div>
