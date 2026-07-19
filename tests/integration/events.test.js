@@ -5,6 +5,8 @@ const app = require('../../app');
 const { db } = require('../../lib/data-accessors/db');
 const { disconnectRedis, flushAll } = require('../../lib/cache/redis');
 const { assignVariant } = require('../../lib/helpers/assignment-engine');
+const { ensureTestServiceKey } = require('./test-auth-helper');
+const { assertSafeTestDatabase, truncateTables } = require('./test-db-helper');
 
 describe('Event Tracking (Phase 12)', () => {
   const experiment = {
@@ -25,14 +27,14 @@ describe('Event Tracking (Phase 12)', () => {
   });
 
   beforeAll(async () => {
+    await assertSafeTestDatabase();
     const migrate = require('../../lib/helpers/migrate');
     await migrate();
+    await ensureTestServiceKey();
   });
 
   beforeEach(async () => {
-    await db.none('TRUNCATE TABLE experiments CASCADE');
-    await db.none('TRUNCATE TABLE exposure_events CASCADE');
-    await db.none('TRUNCATE TABLE telemetry_events CASCADE');
+    await truncateTables(['experiments', 'exposure_events', 'telemetry_events']);
     await flushAll();
     await request(app).post('/api/v1/experiments').set('x-api-key', 'dev-api-key').send(experiment).expect(201);
   });

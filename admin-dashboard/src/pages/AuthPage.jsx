@@ -3,6 +3,8 @@ import { useForm } from 'react-hook-form';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Activity, AlertCircle } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { VALIDATION_LIMITS, normalizeEmail } from '../constants/validation';
+import { getLivenessStatus } from '../api/health';
 
 export default function AuthPage({ mode }) {
   const isSignup = mode === 'signup';
@@ -17,14 +19,8 @@ export default function AuthPage({ mode }) {
   useEffect(() => {
     let mounted = true;
     const checkHealth = async () => {
-      const url = import.meta.env.VITE_HECATE_API_URL || 'http://localhost:4000';
-      try {
-        const response = await fetch(`${url.replace(/\/$/, '')}/health`, { method: 'GET', headers: { Accept: 'application/json' } });
-        const payload = response.ok ? await response.json() : null;
-        if (mounted) setBackendStatus(payload?.status === 'ok' ? 'online' : 'offline');
-      } catch {
-        if (mounted) setBackendStatus('offline');
-      }
+      const status = await getLivenessStatus();
+      if (mounted) setBackendStatus(status);
     };
     checkHealth();
     const interval = setInterval(checkHealth, 10000);
@@ -35,12 +31,13 @@ export default function AuthPage({ mode }) {
 
   const submit = async ({ email, password }) => {
     setServerError('');
+    const credentials = { email: normalizeEmail(email), password };
     try {
       if (isSignup) {
-        await signup({ email, password });
+        await signup(credentials);
         navigate('/login', { replace: true, state: { notice: 'Account created. Log in to access the dashboard and create SDK keys.' } });
       } else {
-        await login({ email, password });
+        await login(credentials);
         navigate(destination, { replace: true });
       }
     } catch (error) {
@@ -51,7 +48,7 @@ export default function AuthPage({ mode }) {
   return (
     <main className="auth-page">
       <div className="api-status auth-api-status" data-testid="auth-api-status" aria-label={`Backend API ${backendStatus}`}>
-        <Activity size={16} /><span>API:</span><div className={`status-dot ${backendStatus === 'online' ? 'online' : 'offline'}`} /><span style={{ textTransform: 'capitalize', fontWeight: 600 }}>{backendStatus}</span>
+        <Activity size={16} /><span>API:</span><div className={`status-dot ${backendStatus}`} /><span style={{ textTransform: 'capitalize', fontWeight: 600 }}>{backendStatus}</span>
       </div>
       <section className="auth-card">
       <div className="logo-icon">H</div><h1>{isSignup ? 'Create your account' : 'Welcome back'}</h1>
@@ -60,10 +57,10 @@ export default function AuthPage({ mode }) {
       {serverError && <div className="alert alert-danger" role="alert"><AlertCircle size={20} /><div className="alert-message">{serverError}</div></div>}
       <form onSubmit={handleSubmit(submit)}>
         <div className="form-group"><label className="form-label" htmlFor="email">Email</label>
-          <input id="email" className="form-input" type="email" autoComplete="email" {...register('email', { required: 'Email is required', pattern: { value: /^\S+@\S+\.\S+$/, message: 'Enter a valid email address' } })} />
+          <input id="email" className="form-input" type="email" autoComplete="email" maxLength={VALIDATION_LIMITS.emailMaxLength} {...register('email', { required: 'Email is required', maxLength: { value: VALIDATION_LIMITS.emailMaxLength, message: `Email cannot exceed ${VALIDATION_LIMITS.emailMaxLength} characters` }, pattern: { value: /^\S+@\S+\.\S+$/, message: 'Enter a valid email address' } })} />
           {errors.email && <p className="form-error">{errors.email.message}</p>}</div>
         <div className="form-group"><label className="form-label" htmlFor="password">Password</label>
-          <input id="password" className="form-input" type="password" autoComplete={isSignup ? 'new-password' : 'current-password'} {...register('password', { required: 'Password is required', minLength: { value: 8, message: 'Password must be at least 8 characters' } })} />
+          <input id="password" className="form-input" type="password" autoComplete={isSignup ? 'new-password' : 'current-password'} maxLength={VALIDATION_LIMITS.passwordMaxLength} {...register('password', { required: 'Password is required', minLength: isSignup ? { value: VALIDATION_LIMITS.passwordMinLength, message: `Password must be at least ${VALIDATION_LIMITS.passwordMinLength} characters` } : undefined, maxLength: { value: VALIDATION_LIMITS.passwordMaxLength, message: `Password cannot exceed ${VALIDATION_LIMITS.passwordMaxLength} characters` } })} />
           {errors.password && <p className="form-error">{errors.password.message}</p>}</div>
         <button className="btn btn-primary auth-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Please wait...' : isSignup ? 'Create account' : 'Log in'}</button>
       </form>

@@ -45,6 +45,7 @@ async function request(path, options = {}) {
         throw new APIError(options.auth === false ? message : 'Your session has expired. Please log in again.', 401, 'unauthorized', data);
       }
       if (response.status === 400) throw new APIError(message, 400, 'invalid_payload', data);
+      if (response.status === 429) throw new APIError(message || 'Too many requests. Please wait and try again.', 429, 'rate_limit_exceeded', data);
       if (response.status === 404) throw new APIError('Experiment or resource not found.', 404, 'not_found', data);
       if (response.status === 409) throw new APIError(message, 409, 'conflict', data);
       if (response.status >= 500) throw new APIError('Internal server error occurred.', response.status, 'server_error', data);
@@ -59,10 +60,19 @@ async function request(path, options = {}) {
   }
 }
 
+function buildQuery(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+  });
+  const serialized = query.toString();
+  return serialized ? `?${serialized}` : '';
+}
+
 export const apiClient = {
   signup: (payload) => request('/api/v1/auth/signup', { method: 'POST', body: JSON.stringify(payload), auth: false }),
   login: (payload) => request('/api/v1/auth/login', { method: 'POST', body: JSON.stringify(payload), auth: false }),
-  getExperiments: () => request('/api/v1/experiments'),
+  getExperiments: (params) => request(`/api/v1/experiments${buildQuery(params)}`),
   getExperiment: (key) => request(`/api/v1/experiments/${encodeURIComponent(key)}`),
   createExperiment: (payload) => request('/api/v1/experiments', { method: 'POST', body: JSON.stringify(payload) }),
   updateExperiment: (key, payload) => request(`/api/v1/experiments/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify(payload) }),
@@ -70,7 +80,7 @@ export const apiClient = {
   activateExperiment: (key) => request(`/api/v1/experiments/${encodeURIComponent(key)}/activate`, { method: 'POST' }),
   deactivateExperiment: (key) => request(`/api/v1/experiments/${encodeURIComponent(key)}/deactivate`, { method: 'POST' }),
   deleteExperiment: (key) => request(`/api/v1/experiments/${encodeURIComponent(key)}`, { method: 'DELETE' }),
-  getKeys: () => request('/api/v1/keys'),
+  getKeys: (params) => request(`/api/v1/keys${buildQuery(params)}`),
   createKey: (payload) => request('/api/v1/keys', { method: 'POST', body: JSON.stringify(payload) }),
   revokeKey: (id) => request(`/api/v1/keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };

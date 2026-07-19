@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Beaker, Menu, X, Activity, Sun, Moon, KeyRound, LogOut } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { getReadinessStatus } from '../api/health';
 
 export default function Layout({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [backendStatus, setBackendStatus] = useState('checking'); // checking, online, offline
+  const [backendStatus, setBackendStatus] = useState('checking');
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('hecate-theme') || 'light';
   });
@@ -29,23 +30,7 @@ export default function Layout({ children }) {
 
   useEffect(() => {
     const checkHealth = async () => {
-      const url = import.meta.env.VITE_HECATE_API_URL || 'http://localhost:4000';
-      try {
-        const res = await fetch(`${url.replace(/\/$/, '')}/health`, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.status === 'ok') {
-            setBackendStatus('online');
-            return;
-          }
-        }
-        setBackendStatus('offline');
-      } catch {
-        setBackendStatus('offline');
-      }
+      setBackendStatus(await getReadinessStatus());
     };
 
     checkHealth();
@@ -131,7 +116,7 @@ export default function Layout({ children }) {
             <div className="api-status">
               <Activity size={16} />
               <span>API: </span>
-              <div className={`status-dot ${backendStatus === 'online' ? 'online' : 'offline'}`} />
+              <div className={`status-dot ${backendStatus.replace(' ', '-')}`} />
               <span style={{ textTransform: 'capitalize', fontWeight: 600 }}>
                 {backendStatus}
               </span>

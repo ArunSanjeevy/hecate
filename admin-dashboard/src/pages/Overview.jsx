@@ -8,8 +8,8 @@ import { LoadingState, ErrorState } from '../components/States';
 
 export default function Overview() {
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['experiments'],
-    queryFn: apiClient.getExperiments,
+    queryKey: ['experiments', 'overview'],
+    queryFn: () => apiClient.getExperiments({ limit: 100, offset: 0 }),
   });
 
   if (isLoading) return <LoadingState message="Loading platform overview..." />;
@@ -24,7 +24,7 @@ export default function Overview() {
   }
 
   const experiments = data?.experiments || [];
-  const totalCount = experiments.length;
+  const totalCount = data?.pagination?.total ?? experiments.length;
   const activeCount = experiments.filter(e => e.status === 'active').length;
   const draftCount = experiments.filter(e => e.status === 'draft').length;
   const pausedCount = experiments.filter(e => e.status === 'paused').length;
@@ -45,7 +45,7 @@ export default function Overview() {
       <div className="action-header">
         <div>
           <h2 className="page-title">Platform Overview</h2>
-          <p className="page-subtitle">Snapshot of experiment configurations and status distribution</p>
+          <p className="page-subtitle">Snapshot of experiment configurations. Total count comes from the backend; status distribution uses the latest page of experiments.</p>
         </div>
         <Link to="/experiments/new" className="btn btn-primary">
           <PlusCircle size={18} />
